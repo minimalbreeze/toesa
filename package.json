@@ -1,0 +1,17 @@
+{
+  "name": "toesa",
+  "private": true,
+  "version": "0.1.0",
+  "description": "퇴사하고 싶다 : 오늘도 버텼다 — 직장인 방치형 선택 시뮬레이션",
+  "scripts": {
+    "build": "node scripts/build-www.mjs",
+    "ios": "npm run build && npx cap sync ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3"
+  }
+}

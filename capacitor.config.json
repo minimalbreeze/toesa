@@ -1,0 +1,10 @@
+{
+  "appId": "com.minimalbreeze.toesa",
+  "appName": "퇴사하고 싶다",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#2f2b3a",
+    "allowsLinkPreview": false
+  }
+}

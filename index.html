@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>퇴사하고 싶다</title>
+<meta name="description" content="퇴사하고 싶다 : 오늘도 버텼다 — 회사를 버틸지, 벗어날지. 직장인 방치형 선택 시뮬레이션.">
+<meta name="theme-color" content="#2f2b3a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="퇴사하고 싶다">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preload" href="fonts/Galmuri11.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!--APP-->
+<div id="app">
+  <header id="hud">
+    <div class="hud-top"><span id="h-date">입사 1개월차 · 월요일</span><span id="h-rank" class="chip">사원</span></div>
+    <div class="hud-time"><b id="h-time">17:55</b><span id="h-phase">퇴근 5분 전</span><span id="h-streak"></span></div>
+    <div class="bars">
+      <div class="bar" id="b-hp"><label>체력</label><div class="track"><i></i></div><em>80</em></div>
+      <div class="bar" id="b-mind"><label>멘탈</label><div class="track"><i></i></div><em>70</em></div>
+    </div>
+    <div class="nums">
+      <div><label>현금</label><b id="h-cash">3,000,000원</b></div>
+      <div><label>평가</label><b id="h-eval">40</b></div>
+      <div><label>퇴사 게이지</label><b id="h-goal">6%</b></div>
+    </div>
+  </header>
+
+  <div id="stage">
+    <canvas id="scene" width="120" height="84" aria-label="픽셀 사무실 장면"></canvas>
+    <div id="toast" hidden></div>
+  </div>
+
+  <section id="card" aria-live="polite"></section>
+
+  <footer id="dock">
+    <div id="sidebank"></div>
+    <button id="btn-resign" data-act="resign" aria-label="사직서 내기">사직서</button>
+  </footer>
+</div>
+
+<div id="overlay" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<!--/APP-->
+
+<script src="js/data/config.js"></script>
+<script src="js/data/events.js"></script>
+<script src="js/data/sidejobs.js"></script>
+<script src="js/data/endings.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
