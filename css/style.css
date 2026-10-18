@@ -200,7 +200,7 @@ html.standalone #app {
 .form input:focus-visible, .form select:focus-visible { outline: 3px solid var(--mind); outline-offset: 1px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-row > div { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 6px; min-width: 0; }
-.form-row label { grid-column: 1 / -1; }
+.form-row label, .form-row select { grid-column: 1 / -1; }
 .form-unit { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; }
 .form small { font-size: 12px; color: var(--muted); }
 .form-err { margin: 0; color: var(--stamp); font-size: 13px; }

@@ -26,7 +26,7 @@
     M.runs = (M.runs || 0) + 1;
     const p = profile();
     // 연차로 시작 직급을, 입력한 월급으로 월급 눈금 전체를 맞춘다
-    const rank = C.rankByYears.filter((y) => p.years > y).length;
+    const rank = p.rank != null ? p.rank : rankOfYears(p.years);
     const scale = p.salary ? (p.salary * 10000) / C.ranks[rank].salary : 1;
     const rankPay = C.ranks[rank].salary * scale;
     const ratio = rankPay / C.ranks[0].salary;
@@ -68,6 +68,7 @@
   const living = () => Math.max(300000, S.livingBase + S.livingDelta);
   const goal = () => S.goal;
   const profile = () => Object.assign({}, C.defaultProfile, M.profile || {});
+  const rankOfYears = (y) => C.rankByYears.filter((t) => (y || 1) > t).length;
   const company = () => profile().company || C.defaultProfile.company;
   function deptName() {
     const p = profile();
@@ -536,7 +537,7 @@
         <p class="muted">회사를 버틸지, 회사를 벗어날지. 매일의 선택이 결말을 바꾼다. 다만 회사는 마음대로 되는 게 하나도 없다.</p>
         <button class="btn primary" data-act="setup">내 회사로 입사하기</button>
         <button class="btn" data-act="start">그냥 입사하기</button>
-        <p class="muted">"내 회사로"를 고르면 회사 이름·부서·연차·월급을 넣고 시작해. 부서에 따라 에피소드가 달라지고, 나중에 내 회사생활 리포트에 쓰여.</p>`;
+        <p class="muted">"내 회사로"를 고르면 회사 이름·부서·연차·직급·월급을 넣고 시작해. 부서에 따라 에피소드가 달라지고, 나중에 내 회사생활 리포트에 쓰여.</p>`;
     } else if (v.type === 'setup') {
       html = `<div class="who">입사 서류</div>${profileForm()}
         <button class="btn primary" data-act="setup-go">이대로 입사하기</button>
@@ -684,6 +685,9 @@
         <input id="p-deptname" type="text" maxlength="12" value="${esc(p.deptName || '')}" placeholder="부서 이름 (예: 총무팀)"${p.dept === 'etc' ? '' : ' hidden'}>
         <div class="form-row">
           <div><label for="p-years">연차</label><input id="p-years" type="number" inputmode="numeric" min="1" max="40" value="${p.years || ''}" placeholder="1"><small>년 차</small></div>
+          <div><label for="p-rank">직급</label><select id="p-rank"><option value="">연차로 자동</option>${C.ranks.map((r, i) => `<option value="${i}"${p.rank === i ? ' selected' : ''}>${r.name}</option>`).join('')}</select></div>
+        </div>
+        <div class="form-row">
           <div><label for="p-salary">월 실수령</label><input id="p-salary" type="number" inputmode="numeric" min="100" max="5000" value="${p.salary || ''}" placeholder="260"><small>만 원</small></div>
         </div>
         <label for="p-expense">한 달 고정지출 <span class="opt">선택</span></label>
@@ -705,6 +709,7 @@
       dept: $('#p-dept').value,
       deptName: $('#p-deptname').value.trim(),
       years: num('#p-years', 1, 40),
+      rank: $('#p-rank').value === '' ? null : Number($('#p-rank').value),
       salary: num('#p-salary', 100, 5000),
       expense: num('#p-expense', 0, 5000),
     };
@@ -719,7 +724,7 @@
 
   function editProfile() {
     sheet(`<h3>내 정보 고치기</h3>${profileForm()}
-      <p class="muted">회사·부서는 바로 바뀌어. 연차·월급·고정지출은 리포트에는 바로, 게임 속 월급에는 다음 입사부터 반영돼.</p>
+      <p class="muted">회사·부서는 바로 바뀌어. 연차·직급·월급·고정지출은 리포트에는 바로, 게임 속 직급·월급에는 다음 입사부터 반영돼.</p>
       <button class="btn primary" data-act="profile-save">저장</button>
       <button class="btn ghost" data-act="close">닫기</button>`);
   }
@@ -750,6 +755,7 @@
     const per = T.REPORT.personas[r.persona];
     const tips = T.REPORT.advice.filter((a) => a.when(S, p, r)).slice(0, 5);
     const yrs = T.REPORT.years.find((y) => (p.years || 1) <= y.max);
+    const pace = p.rank != null ? T.REPORT.rankPace.find((x) => x.when(p.rank - rankOfYears(p.years))) : null;
     const check = (label, value, bad, good) => `<li><span>${label}</span><b>${value}</b><em class="${bad ? 'bad' : good ? 'good' : ''}">${bad ? '위험' : good ? '양호' : '보통'}</em></li>`;
     const pct = (x) => Math.round(x * 100) + '%';
     const real = r.savingRate == null
@@ -764,7 +770,7 @@
     sheet(`
       <div class="report">
         <h3>내 회사생활 리포트</h3>
-        <p class="muted">${esc(company())} ${esc(deptName())} · ${p.years || 1}년 차 · 게임 속 입사 ${S.month}개월차 · 선택 ${r.total}번</p>
+        <p class="muted">${esc(company())} ${esc(deptName())} · ${p.rank != null ? C.ranks[p.rank].name + ' · ' : ''}${p.years || 1}년 차 · 게임 속 입사 ${S.month}개월차 · 선택 ${r.total}번</p>
         <div class="persona"><span>한 줄 진단</span><b>${per.title}</b><p>${per.body}</p>${r.total < 15 ? '<p class="muted">아직 선택이 적어서 진단이 흔들릴 수 있어. 며칠 더 버티고 다시 보자.</p>' : ''}</div>
         <h4>선택 성향</h4>
         <div class="traits">${Object.entries(T.TRAITS).map(([k, tr]) => `
@@ -782,6 +788,7 @@
         ${real}
         <h4>바꿀 수 있는 것</h4>
         <div class="tips">${tips.length ? tips.map((a) => `<div class="tip"><b>${a.title}</b><p>${a.text}</p></div>`).join('') : '<div class="tip"><b>큰 위험 없음</b><p>지금은 균형이 나쁘지 않다. 이 페이스를 지키는 게 제일 어렵다.</p></div>'}
+          ${pace ? `<div class="tip"><b>${pace.title}</b><p>${pace.text}</p></div>` : ''}
           <div class="tip"><b>${p.years || 1}년 차에게</b><p>${yrs.text}</p></div>
           <div class="tip"><b>${esc(deptName())}에게</b><p>${T.REPORT.dept[p.dept] || T.REPORT.dept.etc}</p></div>
         </div>
