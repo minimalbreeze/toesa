@@ -8,6 +8,11 @@ T.CONFIG = {
 
   start: { hp: 75, mental: 65, cash: 2000000, eval: 35 },
 
+  // 시작할 때 "그냥 입사하기"를 누르면 쓰는 기본 정보 (나중에 리포트에서 고칠 수 있다)
+  defaultProfile: { company: '주식회사 오늘도', dept: 'plan', deptName: '', years: 1, salary: null, expense: null },
+  // 연차 → 시작 직급: 2년 차까지 사원, 5년 차까지 대리, 9년 차까지 과장, 14년 차까지 차장, 그 위는 부장
+  rankByYears: [2, 5, 9, 14],
+
   // 월급은 세금 떼고 통장에 찍히는 돈(실수령) 기준
   ranks: [
     { name: '사원', salary: 2600000 },

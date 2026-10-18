@@ -4,6 +4,7 @@
 // who:   boss / peer / newbie / hr / team / phone / ceo / none  (config.js의 T.WHO)
 // scene: 그림 배경. office(기본) / elevator / meeting / subway / restaurant / street /
 //        bedroom / bar / hrroom / toilet / pantry
+// dept:  이 부서일 때만 나오는 이벤트 (js/data/dept-events.js)
 // prop:  사무실 소품. excel / mail / chat / sleepy / parcel / cake / update / printer / video / nowifi / rain(street)
 // fx:    hp 체력, mental 멘탈, cash 현금, eval 평가,
 //        salary 월급(영구), living 생활비(영구), side 지금 키우는 부업 진도
@@ -907,6 +908,295 @@ T.EVENTS = [
         result: '다음 버스는 23분 뒤.' },
       { label: '걸어간다', fx: { hp: -5, mental: 3 },
         result: '걸으니까 생각이 정리됐다. 대부분 퇴사 생각이었다.' },
+    ],
+  },
+
+  // ═════════ 3차 추가 이벤트 (공통) ═════════
+  // 문장 안의 {회사} {부서}는 플레이어가 입력한 회사 이름·부서 이름으로 바뀐다.
+
+  // ───────── 09:00 출근 ─────────
+  {
+    id: 'm_badge', scene: 'street', phase: 'morning', who: 'none',
+    text: '회사 앞에서 알았다. 사원증을 집에 두고 왔다.',
+    options: [
+      { label: '집에 다시 갔다 온다', fx: { hp: -8, eval: -4 },
+        result: '왕복 50분. 사원증은 현관 신발장 위에서 나를 기다리고 있었다.' },
+      { label: '앞사람 뒤에 바짝 붙어 들어간다', rolls: [
+        { p: 0.6, fx: { mental: 4 }, result: '성공. 경비 아저씨가 못 본 척해 주셨다.' },
+        { p: 0.4, fx: { eval: -6, mental: -4 }, result: '삐- 경보가 울렸다. 로비의 모든 눈이 나를 봤다.' },
+      ] },
+      { label: '임시 출입증을 신청한다', fx: { mental: -3 },
+        result: '방문객 출입증을 목에 걸었다. {회사}에 손님으로 출근했다.' },
+    ],
+  },
+  {
+    id: 'm_liftfull', scene: 'elevator', phase: 'morning', who: 'team',
+    text: '8시 58분. 엘리베이터가 꽉 찼다. 한 명만 더 타면 삐- 소리가 날 것 같다.',
+    options: [
+      { label: '밀고 탄다', rolls: [
+        { p: 0.5, fx: { mental: 2 }, result: '탔다. 소리는 안 났다. 숨도 안 쉬었다.' },
+        { p: 0.5, fx: { mental: -6 }, result: '삐- 모두가 나를 봤다. 내렸다.' },
+      ] },
+      { label: '다음 걸 기다린다', fx: { eval: -3 },
+        result: '다음 엘리베이터는 모든 층에 섰다. 9시 4분.' },
+      { label: '계단으로 간다', fx: { hp: -9, eval: 1 },
+        result: '12층까지 계단. 자리에 앉으니 셔츠가 등에 붙었다.' },
+    ],
+  },
+  {
+    id: 'm_inbox', prop: 'mail', phase: 'morning', who: 'none',
+    text: '휴가 다녀왔더니 안 읽은 메일이 128통이다.',
+    options: [
+      { label: '하나하나 다 읽는다', fx: { hp: -6, eval: 4 },
+        result: '오전이 통째로 사라졌다. 그중 120통은 참조였다.' },
+      { label: '"전체 읽음" 버튼을 누른다', rolls: [
+        { p: 0.6, fx: { mental: 8 }, result: '아무 일도 일어나지 않았다. 원래 다 그런 메일이었다.' },
+        { p: 0.4, fx: { eval: -10, mental: -4 }, result: '그 안에 마감이 어제인 메일이 있었다.' },
+      ] },
+      { label: '제목에 "긴급"만 골라 읽는다', fx: { eval: 1, mental: 2 },
+        result: '"긴급"이 47통이었다. 회사에선 모든 게 긴급하다.' },
+    ],
+  },
+  {
+    id: 'm_heel', scene: 'street', phase: 'morning', who: 'none',
+    text: '횡단보도를 건너다 구두 굽이 하수구 틈에 꼈다. 신호는 깜빡이고 있다.',
+    options: [
+      { label: '힘으로 뽑는다', rolls: [
+        { p: 0.5, fx: { hp: -2 }, result: '뽑혔다. 굽은 무사하다. 자존심은 아니다.' },
+        { p: 0.5, fx: { cash: -45000, mental: -5 }, result: '굽만 남고 구두가 빠졌다. 출근길에 새 구두를 샀다.' },
+      ] },
+      { label: '구두를 버리고 건넌다', fx: { mental: 5, cash: -30000 },
+        result: '한 짝만 신고 회사 앞 편의점에서 삼선 슬리퍼를 샀다. 의외로 편하다.' },
+      { label: '지나가는 사람에게 도움을 청한다', fx: { mental: 3 },
+        result: '모르는 아저씨가 같이 뽑아 줬다. 세상은 아직 따뜻하다.' },
+    ],
+  },
+
+  // ───────── 10:30 오전 ─────────
+  {
+    id: 'a_reject', phase: 'am', who: 'boss',
+    text: '결재가 세 번째 반려됐다. 사유: "다시 한번 검토 바람."',
+    options: [
+      { label: '뭘 검토하냐고 묻는다', rolls: [
+        { p: 0.5, fx: { eval: 3, mental: 2 }, result: '"아, 2페이지 표가 좀…" 드디어 진짜 이유를 들었다.' },
+        { p: 0.5, fx: { eval: -6, mental: -6 }, result: '"그걸 내가 말해 줘야 알아?"' },
+      ] },
+      { label: '날짜만 바꿔서 다시 올린다', rolls: [
+        { p: 0.5, fx: { mental: 6 }, result: '승인됐다. 부장님도 안 읽고 있었다.' },
+        { p: 0.5, fx: { eval: -5 }, result: '네 번째 반려. 사유: "다시 한번 검토 바람."' },
+      ] },
+      { label: '처음부터 다시 쓴다', fx: { hp: -10, eval: 4 },
+        result: '새로 썼다. 승인됐다. 처음 버전이랑 거의 같다.' },
+    ],
+  },
+  {
+    id: 'a_mutedboss', prop: 'video', phase: 'am', who: 'boss',
+    text: '화상 회의 10분째. 부장님이 열심히 말씀 중인데 마이크가 꺼져 있다.',
+    options: [
+      { label: '"부장님, 음소거요!"', fx: { eval: 3, mental: -2 },
+        result: '부장님이 처음부터 다시 말씀하셨다. 10분이 20분이 됐다.' },
+      { label: '채팅창에 조용히 알린다', fx: { eval: 2 },
+        result: '아무도 채팅을 안 봤다. 부장님은 끝까지 무음으로 열변을 토했다.' },
+      { label: '다 같이 모른 척한다', fx: { mental: 6, eval: -2 },
+        result: '역대 가장 평화로운 회의였다.' },
+    ],
+  },
+  {
+    id: 'a_crash', prop: 'excel', phase: 'am', who: 'none',
+    text: '두 시간 동안 만든 엑셀이 저장 직전에 꺼졌다. "응답 없음."',
+    options: [
+      { label: '자동 복구를 믿는다', rolls: [
+        { p: 0.5, fx: { mental: 8 }, result: '살아 있었다! 자동 복구님 감사합니다.' },
+        { p: 0.5, fx: { mental: -10, hp: -4 }, result: '복구된 파일은 두 시간 전 것이었다.' },
+      ] },
+      { label: '기억을 더듬어 다시 만든다', fx: { hp: -10, eval: 2 },
+        result: '두 번째는 한 시간 걸렸다. 그리고 Ctrl+S를 30번 눌렀다.' },
+      { label: '모니터를 바라보며 5분간 멍때린다', fx: { mental: 3, eval: -2 },
+        result: '아무것도 해결되지 않았지만 마음은 조금 정리됐다.' },
+    ],
+  },
+  {
+    id: 'a_reorg', scene: 'meeting', phase: 'am', who: 'team',
+    text: '조직 개편 소문이 돈다. {부서}이 다른 팀과 합쳐진다는 얘기다.',
+    options: [
+      { label: '인맥을 총동원해 정보를 캔다', fx: { mental: -4, eval: 1 },
+        result: '소문이 세 가지 버전으로 늘었다.' },
+      { label: '이력서를 슬쩍 업데이트한다', fx: { mental: 5, side: 1 },
+        result: '이력서를 고치다 보니 하고 싶은 일이 하나 떠올랐다.' },
+      { label: '모르는 게 약이다', rolls: [
+        { p: 0.6, fx: { mental: 3 }, result: '소문은 소문으로 끝났다.' },
+        { p: 0.4, fx: { mental: -8, eval: -3 }, result: '다음 주 발표. 새 팀장님이 오신다. 처음 보는 분이다.' },
+      ] },
+    ],
+  },
+
+  // ───────── 12:30 점심 ─────────
+  {
+    id: 'l_coupon', scene: 'restaurant', phase: 'lunch', who: 'none',
+    text: '단골 김밥집 쿠폰 도장이 9개다. 하나만 더 찍으면 공짜다. 그런데 오늘 가게가 문을 닫았다.',
+    options: [
+      { label: '내일 다시 온다', fx: { cash: -8000, mental: -2 },
+        result: '옆 가게에서 먹었다. 쿠폰은 지갑 속에서 하루 더 기다린다.' },
+      { label: '"사정상 폐업합니다" 안내문을 읽는다', fx: { mental: -6 },
+        result: '쿠폰 9개가 추억이 됐다.' },
+      { label: '쿠폰을 동기에게 준다', fx: { mental: 3, eval: 1 },
+        result: '동기가 감동했다. 사실 나 다이어트 중이다.' },
+    ],
+  },
+  {
+    id: 'l_newbie', scene: 'restaurant', phase: 'lunch', who: 'newbie',
+    text: '신입이 쭈뼛거리며 묻는다. "선배, 점심 같이 드셔도 돼요?"',
+    options: [
+      { label: '맛집에 데려가서 산다', fx: { cash: -24000, mental: 4, eval: 2 },
+        result: '"선배 최고예요!" 그 한마디에 2만 4천 원이 아깝지 않았다. 조금 아까웠다.' },
+      { label: '구내식당에 같이 간다', fx: { cash: -5500, mental: 2 },
+        result: '신입이 회사 고민을 털어놨다. 3년 전 내 고민이랑 똑같았다.' },
+      { label: '"나 약속 있어" 하고 혼밥', fx: { mental: 3, eval: -1 },
+        result: '혼자 먹는 밥이 맛있었다. 조금 미안했다.' },
+    ],
+  },
+  {
+    id: 'l_battery', scene: 'pantry', phase: 'lunch', who: 'none',
+    text: '휴대폰 배터리 3%. 충전기는 집에 있다. 오후에 중요한 전화가 온다.',
+    options: [
+      { label: '팀원에게 충전기를 빌린다', fx: { mental: -2 },
+        result: '빌린 충전기는 단자가 안 맞았다. 다른 팀원 걸 또 빌렸다.' },
+      { label: '편의점에서 새로 산다', fx: { cash: -15000 },
+        result: '집에 충전기가 하나 더 늘었다. 일곱 개째다.' },
+      { label: '절전 모드로 버틴다', rolls: [
+        { p: 0.5, fx: { mental: 4 }, result: '1%로 전화를 받고 끊는 순간 꺼졌다. 완벽한 타이밍.' },
+        { p: 0.5, fx: { eval: -7 }, result: '통화 중에 꺼졌다. 상대방은 내가 끊은 줄 안다.' },
+      ] },
+    ],
+  },
+  {
+    id: 'l_errand', scene: 'pantry', phase: 'lunch', who: 'boss',
+    text: '"오는 길에 내 커피도 하나만~" 부장님 메뉴: 샷 추가, 시럽 반, 얼음 적게, 우유 저지방.',
+    options: [
+      { label: '완벽하게 사 온다', fx: { cash: -6500, eval: 3 },
+        result: '"오, 딱 이거야." 커피 주문 외우는 데 오후 일 할 머리를 다 썼다.' },
+      { label: '그냥 아메리카노를 사 온다', fx: { cash: -4500, eval: -2, mental: 2 },
+        result: '"…뭐, 고마워." 차이를 아셨다.' },
+      { label: '깜빡한 척한다', rolls: [
+        { p: 0.5, fx: { mental: 5 }, result: '부장님도 깜빡하셨다.' },
+        { p: 0.5, fx: { eval: -6 }, result: '"내 커피는?" 빈손으로 서 있었다.' },
+      ] },
+    ],
+  },
+
+  // ───────── 15:00 오후 ─────────
+  {
+    id: 'p_snack', phase: 'pm', who: 'team',
+    text: '내 서랍 속 간식이 사라졌다. 초코바 포장지만 휴지통에 남아 있다.',
+    options: [
+      { label: '단톡에 범인을 묻는다', rolls: [
+        { p: 0.5, fx: { mental: 4 }, result: '다음 날 서랍에 초코바 두 개가 들어 있었다. 이자까지.' },
+        { p: 0.5, fx: { mental: -6, eval: -2 }, result: '"그거 하나 갖고…" 쪼잔한 사람이 됐다.' },
+      ] },
+      { label: '서랍에 자물쇠를 단다', fx: { cash: -9000, mental: 3 },
+        result: '이제 내 간식은 안전하다. 팀 분위기는 조금 덜 안전하다.' },
+      { label: '아예 간식 바구니를 만든다', fx: { cash: -20000, eval: 3, mental: 2 },
+        result: '팀원들이 나를 "간식 요정"이라고 부른다.' },
+    ],
+  },
+  {
+    id: 'p_ppt', phase: 'pm', who: 'boss', prop: 'excel',
+    text: '대표님 보고용 장표 30장을 만들었다. 부장님: "대표님 바쁘셔. 3장으로 줄여."',
+    options: [
+      { label: '진짜 3장으로 줄인다', fx: { hp: -8, eval: 5 },
+        result: '줄이는 게 만드는 것보다 어려웠다. 3장은 꽤 좋았다.' },
+      { label: '글씨 크기를 8로 줄여 3장에 다 넣는다', rolls: [
+        { p: 0.4, fx: { mental: 4 }, result: '"오, 알차네." 아무도 못 읽었다.' },
+        { p: 0.6, fx: { eval: -6 }, result: '"이거 돋보기 갖고 보라는 거야?"' },
+      ] },
+      { label: '나머지 27장을 부록으로 붙인다', fx: { eval: 2, mental: 2 },
+        result: '대표님은 부록만 봤다.' },
+    ],
+  },
+  {
+    id: 'p_result', scene: 'meeting', phase: 'pm', who: 'ceo', minMonth: 2,
+    text: '분기 실적 발표. 대표님: "이번 분기 {부서} 고생 많았어요. 그런데…"',
+    options: [
+      { label: '"그런데"를 담담히 듣는다', fx: { mental: -6, eval: 2 },
+        result: '"그런데" 뒤에 20분이 더 있었다.' },
+      { label: '박수를 제일 크게 친다', fx: { eval: 3, mental: -2 },
+        result: '혼자 박수를 쳤다. "그런데"는 아직 시작도 안 했다.' },
+      { label: '다음 분기 계획을 먼저 말한다', rolls: [
+        { p: 0.5, fx: { eval: 8 }, result: '"오, 준비됐네." 대표님 수첩에 내 이름이 적혔다.' },
+        { p: 0.5, fx: { eval: -4, hp: -6 }, result: '"좋아요, 그럼 그거 다음 주까지." 일만 늘었다.' },
+      ] },
+    ],
+  },
+  {
+    id: 'p_plant', phase: 'pm', who: 'none',
+    text: '내 자리 화분이 시들었다. 회사에서 키운 지 1년. 이름도 지어 줬다.',
+    options: [
+      { label: '물을 듬뿍 준다', rolls: [
+        { p: 0.6, fx: { mental: 6 }, result: '다음 날 잎이 다시 섰다. 너도 버텼구나.' },
+        { p: 0.4, fx: { mental: -5 }, result: '과습이었다. 미안해, 김부장(화분 이름).' },
+      ] },
+      { label: '창가로 옮긴다', fx: { mental: 3 },
+        result: '창가 자리는 부장님 자리다. 화분이 나보다 먼저 승진했다.' },
+      { label: '"너도 힘들지" 하고 같이 쉰다', fx: { mental: 4, eval: -1 },
+        result: '화분과 나, 둘 다 광합성이 필요했다.' },
+    ],
+  },
+
+  // ───────── 17:55 퇴근 5분 전 ─────────
+  {
+    id: 'o_ceomail', prop: 'mail', phase: 'off', who: 'ceo',
+    text: '5시 59분. 대표님 메일이 도착했다. 제목: "간단한 의견 부탁드립니다 (내일 오전까지)"',
+    options: [
+      { label: '오늘 밤에 써서 보낸다', fx: { hp: -10, eval: 6 },
+        result: '새벽 1시에 보냈다. 대표님이 새벽 1시 5분에 답장했다. 이분도 안 잔다.' },
+      { label: '내일 아침 일찍 쓴다', fx: { hp: -4, eval: 2 },
+        result: '7시 반 출근. 커피 두 잔과 함께 "간단한" 의견 4페이지를 썼다.' },
+      { label: '"간단한"을 믿고 세 줄만 쓴다', rolls: [
+        { p: 0.5, fx: { mental: 6, eval: 2 }, result: '"명쾌하네요." 세 줄이 정답이었다.' },
+        { p: 0.5, fx: { eval: -8 }, result: '"좀 더 구체적으로…" 간단하지 않았다.' },
+      ] },
+    ],
+  },
+  {
+    id: 'o_dinnervote', prop: 'chat', phase: 'off', who: 'boss',
+    text: '부장님이 단톡방에 회식 장소 투표를 올렸다. 선택지: ① 삼겹살 ② 삼겹살 ③ 부장님 단골 삼겹살.',
+    options: [
+      { label: '③에 투표한다', fx: { eval: 3, mental: -2 },
+        result: '만장일치. 회식은 결국 삼겹살이다.' },
+      { label: '"파스타는 어떠세요?" 기타 의견', rolls: [
+        { p: 0.3, fx: { mental: 8, eval: 1 }, result: '"오, 그래 가끔은!" 팀원들이 나를 영웅으로 봤다.' },
+        { p: 0.7, fx: { eval: -3, mental: -3 }, result: '"파스타는 배가 안 차~" 삼겹살로 결정됐다.' },
+      ] },
+      { label: '투표 안 하고 알림을 끈다', fx: { mental: 3, eval: -2 },
+        result: '다음 날, 안 낸 사람 명단에 내 이름만 있었다.' },
+    ],
+  },
+  {
+    id: 'o_friendbday', scene: 'subway', prop: 'phone', phase: 'off', who: 'phone',
+    text: '오늘 친구 생일 파티다. 7시 시작. 그런데 팀장님이 "잠깐 얘기 좀" 하신다.',
+    options: [
+      { label: '팀장님 얘기를 듣고 늦게 간다', fx: { eval: 3, mental: -5 },
+        result: '도착하니 케이크가 반 남아 있었다. 친구가 "역시 직장인"이라며 웃었다.' },
+      { label: '"내일 아침에 말씀 나눠도 될까요?"', rolls: [
+        { p: 0.6, fx: { mental: 8 }, result: '"그래, 그래." 생일 노래를 처음부터 불렀다.' },
+        { p: 0.4, fx: { mental: 4, eval: -6 }, result: '"…알았어." 다음 날 팀장님 말투가 30% 차가웠다.' },
+      ] },
+      { label: '파티에 못 간다고 연락한다', fx: { mental: -8, eval: 2 },
+        result: '단톡방에 올라온 파티 사진을 야근하며 봤다.' },
+    ],
+  },
+  {
+    id: 'o_taxi', scene: 'street', phase: 'off', who: 'none',
+    text: '밤 11시 야근 후 택시를 탔다. 야근 택시비는 회사 지원인데, 영수증 처리가 복잡하다.',
+    options: [
+      { label: '영수증을 꼼꼼히 챙긴다', fx: { hp: -2, cash: 0 },
+        result: '정산 서류 다섯 장을 썼다. 승인까지 3주.' },
+      { label: '귀찮아서 내 돈으로 낸다', fx: { cash: -28000, mental: 2 },
+        result: '2만 8천 원으로 귀찮음을 샀다.' },
+      { label: '지하철 막차를 노린다', rolls: [
+        { p: 0.5, fx: { mental: 4 }, result: '막차를 탔다! 텅 빈 지하철이 내 것 같다.' },
+        { p: 0.5, fx: { hp: -6, cash: -32000 }, result: '막차가 떠났다. 결국 택시. 영수증은 잃어버렸다.' },
+      ] },
     ],
   },
 ];

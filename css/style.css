@@ -67,7 +67,7 @@ html.standalone #app {
 .hud-time { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .hud-time b { font-size: 26px; line-height: 1; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
 .hud-time span { font-size: 13px; color: var(--on-night-muted); }
-#h-streak { margin-left: auto; color: var(--gold); }
+#h-org { margin-left: auto; color: var(--on-night-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
 
 .bars { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .bar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; font-size: 12px; }
@@ -176,6 +176,58 @@ html.standalone #app {
 .minus { color: var(--stamp); }
 .slip-f { margin-top: 6px; padding-top: 6px; border-top: 2px solid var(--ink); text-align: right; font-weight: 700; }
 
+/* 근무 일지 */
+.daylog .log { list-style: none; margin: 0; padding: 0; display: grid; }
+.daylog .log li { display: grid; grid-template-columns: 3.2em 1fr; gap: 2px 8px; padding: 6px 0; border-top: 1px dashed #b5aea0; font-size: 13px; }
+.daylog .log li:first-child { border-top: 0; }
+.daylog .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.daylog .l { min-width: 0; }
+.daylog .l em { font-style: normal; color: var(--stamp); font-size: 11px; border: 1px solid var(--stamp); padding: 0 4px; }
+.daylog .c { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px; }
+.daylog .c .d { font-size: 11px; padding: 0 6px; border-width: 1px; animation: none; }
+.log-sum { border-top: 2px solid var(--ink); margin-top: 4px; padding-top: 8px; display: grid; gap: 6px; font-size: 13px; }
+.log-line { margin: 8px 0 0; font-weight: 700; text-align: center; text-wrap: balance; }
+
+/* 입사 서류 */
+.form { display: grid; gap: 6px; }
+.form label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.form .opt { font-size: 11px; border: 1px solid var(--muted); padding: 0 4px; margin-left: 4px; }
+.form input, .form select {
+  font: inherit; font-size: 16px; color: var(--ink); background: var(--paper-hi);
+  border: 2px solid var(--ink); padding: 8px 10px; width: 100%; min-width: 0; border-radius: 0;
+  -webkit-user-select: text; user-select: text;
+}
+.form input:focus-visible, .form select:focus-visible { outline: 3px solid var(--mind); outline-offset: 1px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-row > div { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 6px; min-width: 0; }
+.form-row label { grid-column: 1 / -1; }
+.form-unit { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; }
+.form small { font-size: 12px; color: var(--muted); }
+.form-err { margin: 0; color: var(--stamp); font-size: 13px; }
+
+/* 리포트 */
+.report { display: grid; gap: 8px; }
+.report h4 { margin: 10px 0 0; font-size: 14px; letter-spacing: 1px; border-bottom: 2px solid var(--ink); padding-bottom: 2px; }
+.persona { background: var(--ink); color: var(--paper-hi); padding: 12px; display: grid; gap: 4px; }
+.persona span { font-size: 11px; color: var(--gold); letter-spacing: 1px; }
+.persona b { font-size: 19px; line-height: 1.3; text-wrap: balance; }
+.persona p { font-size: 14px; line-height: 1.6; }
+.persona .muted { color: #c9c3d6; }
+.traits { display: grid; gap: 6px; }
+.tr { display: grid; grid-template-columns: 5.5em 1fr 3em; align-items: center; gap: 8px; font-size: 13px; }
+.tr b { text-align: right; font-variant-numeric: tabular-nums; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; }
+.checks li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px dashed #b5aea0; font-size: 14px; }
+.checks li:first-child { border-top: 0; }
+.checks b { font-variant-numeric: tabular-nums; }
+.checks em { font-style: normal; font-size: 11px; padding: 0 6px; border: 2px solid var(--muted); color: var(--muted); }
+.checks em.bad { border-color: var(--stamp); color: var(--stamp); }
+.checks em.good { border-color: var(--money); color: var(--money); }
+.tips { display: grid; gap: 8px; }
+.tip { background: var(--paper-hi); border: 2px solid var(--ink); padding: 8px 10px; }
+.tip b { font-size: 14px; }
+.tip p { font-size: 14px; line-height: 1.6; margin-top: 2px; }
+
 /* 타이틀 */
 .logo { margin: 0; font-size: 30px; line-height: 1.15; letter-spacing: -1px; text-wrap: balance; }
 .logo small { display: block; font-size: 17px; letter-spacing: 0; color: var(--stamp); margin-top: 4px; }
@@ -196,6 +248,8 @@ html.standalone #app {
 #sidebank { flex: 1; min-width: 0; display: grid; font-size: 13px; }
 #sidebank b { color: #8fe0b0; font-variant-numeric: tabular-nums; }
 #sidebank span { font-size: 11px; color: var(--on-night-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#btn-report { border: 2px solid var(--on-night-muted); color: var(--on-night); background: transparent; font-size: 13px; padding: 6px 10px; cursor: pointer; }
+#btn-report:disabled { opacity: .3; cursor: default; }
 #btn-resign {
   border: 3px solid var(--stamp); color: var(--stamp); background: transparent; font-weight: 700; font-size: 16px;
   padding: 6px 12px; transform: rotate(-4deg); cursor: pointer; letter-spacing: 2px;
@@ -206,7 +260,7 @@ html.standalone #app {
 /* ── 시트 (사직서·오프라인 수입) ── */
 #overlay { position: fixed; inset: 0; background: rgba(20, 17, 28, .72); display: grid; place-items: end center; z-index: 20; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
 .sheet {
-  width: 100%; max-width: 408px; background: var(--paper); border: 3px solid var(--ink); box-shadow: var(--shadow);
+  width: 100%; max-width: 408px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; background: var(--paper); border: 3px solid var(--ink); box-shadow: var(--shadow);
   padding: 16px; display: grid; gap: 10px; animation: slide .2s steps(4);
 }
 .sheet h3 { margin: 0; font-size: 20px; letter-spacing: 2px; }
