@@ -176,6 +176,18 @@ html.standalone #app {
 .minus { color: var(--stamp); }
 .slip-f { margin-top: 6px; padding-top: 6px; border-top: 2px solid var(--ink); text-align: right; font-weight: 700; }
 
+/* 출근 도장판 */
+.stamps { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.stamp { aspect-ratio: 3 / 4; border: 2px dashed var(--muted); background: var(--paper-hi); display: grid; grid-template-rows: auto 1fr auto; justify-items: center; align-items: center; padding: 3px 1px; min-width: 0; }
+.stamp .sd { font-size: 10px; color: var(--muted); }
+.stamp .sm { font-size: 11px; font-weight: 700; color: var(--stamp); }
+.stamp .sr { font-size: 9px; color: var(--muted); text-align: center; line-height: 1.2; word-break: keep-all; }
+.stamp.done, .stamp.today { border-style: solid; border-color: var(--stamp); }
+.stamp.done .sm, .stamp.today .sm { border: 2px solid var(--stamp); border-radius: 50%; padding: 4px 2px; transform: rotate(-12deg); }
+.stamp.today .sm { animation: stampin .35s steps(3) both; }
+.stamp.big { background: #fff3cf; }
+@keyframes stampin { from { transform: rotate(-12deg) scale(2.2); opacity: 0; } to { transform: rotate(-12deg) scale(1); opacity: 1; } }
+
 /* 근무 일지 */
 .daylog .log { list-style: none; margin: 0; padding: 0; display: grid; }
 .daylog .log li { display: grid; grid-template-columns: 3.2em 1fr; gap: 2px 8px; padding: 6px 0; border-top: 1px dashed #b5aea0; font-size: 13px; }

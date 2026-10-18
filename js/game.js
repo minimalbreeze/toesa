@@ -5,7 +5,6 @@
   const JOB = Object.fromEntries(T.SIDEJOBS.map((j) => [j.id, j]));
   const ORDER = ['eval', 'hp', 'mental', 'cash', 'salary', 'living', 'side'];
   const LABEL = { eval: '평가', hp: '체력', mental: '멘탈', cash: '현금', salary: '월급', living: '생활비', side: '부업 진도', sideIncome: '부업 수입' };
-  const RECHARGE = C.workPass.rechargeHours * 3600000;
   // 주소 끝에 #test 를 붙이면 출근 도장 제한 없이 테스트할 수 있다
   const TEST = location.hash === '#test';
 
@@ -42,7 +41,6 @@
       // 첫 판은 튜토리얼 없이 퇴근 5분 전 부장님으로 바로 시작한다 (첫날 출근 도장 1개 사용)
       view: { type: 'event', id: 'o_boss' },
       bags: {}, seen: { o_boss: 0 },
-      passes: C.workPass.start - 1, passAt: Date.now(),
       monthSide: 0, totalSide: 0,
       started: Date.now(), lastSeen: Date.now(),
     };
@@ -52,7 +50,6 @@
 
   // 1차 버전 저장을 이어서 쓸 수 있게 새로 생긴 칸을 채운다
   function migrate(s) {
-    if (s.passes == null) { s.passes = C.workPass.max; s.passAt = Date.now(); }
     if (!s.bags) s.bags = {};
     if (!s.seen) s.seen = {};
     if (s.scale == null) { s.scale = 1; s.livingBase = C.living; s.goal = C.freedomGoal; }
@@ -96,28 +93,85 @@
   }
   const isGood = (k, v) => (k === 'living' ? v < 0 : v > 0);
 
-  // ───────── 출근 도장 ─────────
-  function recharge() {
-    const now = Date.now();
-    if (S.passAt > now) S.passAt = now; // 시계를 되돌린 경우
-    if (S.passes >= C.workPass.max) { S.passAt = now; return; }
-    const n = Math.floor((now - S.passAt) / RECHARGE);
-    if (n > 0) {
-      S.passes = Math.min(C.workPass.max, S.passes + n);
-      S.passAt += n * RECHARGE;
-      if (S.passes >= C.workPass.max) S.passAt = now;
-    }
+  // ───────── 출근: 실제 하루에 게임 속 하루 하나 ─────────
+  // 기록은 판(S)이 아니라 기기(M)에 남긴다. 다시 입사해도 오늘 근무가 다시 생기지 않는다.
+  function workLeft() {
+    const w = M.work || {};
+    if (w.date && today() < w.date) return 0; // 시계를 되돌린 경우
+    return w.date === today() ? Math.max(0, C.workPerDay - (w.used || 0)) : C.workPerDay;
   }
-  function nextPassMs() { return Math.max(0, RECHARGE - (Date.now() - S.passAt)); }
+  function useWork() {
+    const t = today();
+    if (!M.work || M.work.date !== t) M.work = { date: t, used: 0 };
+    M.work.used++;
+    saveMeta();
+  }
+  function msToMidnight() {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) - d;
+  }
 
   function startDay() {
     if (!TEST) {
-      recharge();
-      if (S.passes <= 0) { S.view = { type: 'gate' }; sfx('gate'); return; }
-      if (S.passes >= C.workPass.max) S.passAt = Date.now();
-      S.passes--;
+      if (workLeft() <= 0) { S.view = { type: 'gate' }; sfx('gate'); return; }
+      useWork();
     }
     S.view = { type: 'event', id: pickEvent() };
+  }
+
+  // ───────── 연속 출근 보상 ─────────
+  // 그날 처음 열었을 때 한 번. 결과는 { n: 연속 일수, broke: 끊겼다가 다시 시작 }
+  function attendance() {
+    const t = today();
+    const y = dayKey(new Date(Date.now() - 864e5));
+    const s = M.streak || { last: '', n: 0 };
+    if (s.last === t) return null;
+    const broke = !!s.last && s.last !== y;
+    s.n = s.last === y ? s.n + 1 : 1;
+    s.last = t;
+    M.streak = s;
+    saveMeta();
+    return { n: s.n, broke };
+  }
+
+  // 보상은 진행 중인 판에만 줄 수 있다. 첫 화면·엔딩이면 다음 입사 때 준다.
+  function checkAttendance() {
+    const a = attendance() || M.pendingStreak;
+    if (!a) return;
+    if (['title', 'setup', 'ending'].includes(S.view.type)) { M.pendingStreak = a; saveMeta(); return; }
+    M.pendingStreak = null; saveMeta();
+    giveStreak(a);
+  }
+
+  function rewardOf(n) {
+    return C.streakMilestones[n] || C.streakRewards[(n - 1) % C.streakRewards.length];
+  }
+
+  function giveStreak(a) {
+    const n = a.n;
+    const r = rewardOf(n);
+    const fx = Object.assign({}, r.fx);
+    if (fx.cash) fx.cash = Math.round(fx.cash * S.scale / 1000) * 1000;
+    const d = apply(fx);
+    save(); hud();
+    const len = C.streakRewards.length;
+    const first = n - ((n - 1) % len);
+    const cells = Array.from({ length: len }, (_, i) => first + i);
+    const next = Object.keys(C.streakMilestones).map(Number).find((m) => m > n);
+    const short = (fx0) => Object.keys(fx0).map((k) => LABEL[k]).join('·');
+    sheet(`
+      <h3>출근 도장판</h3>
+      <p class="muted">${a.broke ? esc(C.streakBreak) + ' ' : ''}연속 출근 <b>${n}일째</b></p>
+      <div class="stamps">${cells.map((day) => `
+        <div class="stamp${day < n ? ' done' : day === n ? ' today' : ''}${C.streakMilestones[day] ? ' big' : ''}">
+          <span class="sd">${day}일</span><span class="sm">${day <= n ? '출근' : ''}</span><span class="sr">${short(rewardOf(day).fx)}</span>
+        </div>`).join('')}
+      </div>
+      <p class="levelup"><b>오늘의 보상</b> ${esc(r.text)}</p>
+      <div class="deltas">${d.list.map(chip).join('')}</div>
+      ${next ? `<p class="muted">다음 특별 보상: ${next}일 연속 출근 (${next - n}일 남음)</p>` : ''}
+      <button class="btn primary" data-act="close">도장 쾅</button>`);
+    sfx('stamp'); setTimeout(() => sfx('coin'), 200);
   }
 
   // ───────── 부업 ─────────
@@ -388,7 +442,7 @@
     const now = Date.now();
     const gone = now - (S.lastSeen || now);
     lastTick = now;
-    if (S.view.type === 'gate') { recharge(); render(); }
+    if (S.view.type === 'gate') render();
     if (gone <= 0) return;
     const capMs = C.offlineCapHours * 3600000;
     const used = Math.min(gone, capMs);
@@ -402,7 +456,7 @@
       <p>회사에 있는 동안에도, 자는 동안에도 부업은 일했다.</p>
       <p class="big money">+${won(inc)}</p>
       <p class="muted">${h ? h + '시간 ' : ''}${m}분치 수입${gone > capMs ? ` · 부업 수입은 최대 ${C.offlineCapHours}시간까지만 쌓여` : ''}</p>
-      <button class="btn primary" data-act="close">통장 확인 완료</button>`);
+      <button class="btn primary" data-act="close">통장 확인 완료</button>`, { queue: true });
     sfx('coin');
   }
 
@@ -412,10 +466,8 @@
     lastTick = now;
     if (!S || dt <= 0 || dt > 5000 || ['ending', 'title'].includes(S.view.type)) return;
     if (S.view.type === 'gate') {
-      const before = S.passes;
-      recharge();
-      if (S.passes !== before) { save(); render(); sfx('good'); }
-      else { const t = $('#gate-left'); if (t) t.textContent = hms(nextPassMs()); }
+      if (workLeft() > 0) { checkAttendance(); render(); sfx('good'); }
+      else { const t = $('#gate-left'); if (t) t.textContent = hms(msToMidnight()); }
     }
     const inc = hourlyTotal() * dt / 3600000;
     if (!inc) return;
@@ -495,10 +547,8 @@
     $('#h-org').textContent = `${company()} · ${deptName()}`;
     if (TEST) $('#h-pass').textContent = '테스트 모드';
     else {
-      recharge();
-      const shown = Math.max(S.passes, 0);
-      const slots = Math.max(C.workPass.max, shown);
-      $('#h-pass').innerHTML = `출근 <span class="dots">${'●'.repeat(shown)}${'○'.repeat(slots - shown)}</span>`;
+      const n = (M.streak && M.streak.n) || 0;
+      $('#h-pass').textContent = n > 1 ? `연속 출근 ${n}일` : workLeft() ? '오늘 출근 전' : '오늘 근무 끝';
     }
     bar('#b-hp', S.hp);
     bar('#b-mind', S.mental);
@@ -591,12 +641,12 @@
         }).join('')}</div>
         <button class="btn ghost" data-act="back">돌아가기</button>`;
     } else if (v.type === 'gate') {
-      const full = S.passes > 0;
+      const full = workLeft() > 0;
       html = `
-        <div class="who">출근 도장 0개</div>
-        <p class="text">오늘은 여기까지. 회사도 나도 좀 쉬어야 한다.</p>
-        <p class="muted">출근 도장은 ${C.workPass.rechargeHours}시간마다 1개씩, 최대 ${C.workPass.max}개까지 모여. 그동안에도 부업 수입은 쌓여.</p>
-        <div class="gate-clock">${full ? '출근할 수 있어' : `다음 출근까지 <b id="gate-left">${hms(nextPassMs())}</b>`}</div>
+        <div class="who">오늘 근무 끝</div>
+        <p class="text">오늘은 여기까지. 회사도 나도 내일 다시.</p>
+        <p class="muted">실제 하루에 게임 속 하루 하나만 출근할 수 있어. 내일 열면 출근 도장이 찍히고, 연속으로 출근할수록 보상이 커져. 그동안에도 부업 수입은 쌓여.</p>
+        <div class="gate-clock">${full ? '출근할 수 있어' : `다음 출근까지 <b id="gate-left">${hms(msToMidnight())}</b>`}</div>
         <button class="btn primary" data-act="work-day" ${full ? '' : 'disabled'}>${full ? '출근한다 ›' : '아직 퇴근 중'}</button>`;
     } else if (v.type === 'payday') {
       const s = v.slip;
@@ -845,8 +895,15 @@
   }
 
   // ───────── 공통 UI ─────────
-  function sheet(html) { $('#sheet').innerHTML = html; $('#overlay').hidden = false; }
-  function closeSheet() { $('#overlay').hidden = true; }
+  const sheetQueue = [];
+  function sheet(html, opt) {
+    if (opt && opt.queue && !$('#overlay').hidden) { sheetQueue.push(html); return; }
+    $('#sheet').innerHTML = html; $('#overlay').hidden = false; $('#sheet').scrollTop = 0;
+  }
+  function closeSheet() {
+    if (sheetQueue.length) { sheet(sheetQueue.shift()); return; }
+    $('#overlay').hidden = true;
+  }
   let toastTimer = 0;
   function toast(msg) {
     const t = $('#toast');
@@ -865,9 +922,9 @@
     if (!b || b.disabled) return;
     const a = b.dataset.act;
     if (a !== 'choose') sfx('tap');
-    if (a === 'start') { if (!M.profile) M.profile = Object.assign({}, C.defaultProfile); saveMeta(); newGame(); render(); }
+    if (a === 'start') { if (!M.profile) M.profile = Object.assign({}, C.defaultProfile); saveMeta(); newGame(); render(); checkAttendance(); }
     else if (a === 'setup') { S.view = { type: 'setup' }; render(); }
-    else if (a === 'setup-go') { const p = readProfile(); if (!p) return; M.profile = p; saveMeta(); newGame(); render(); }
+    else if (a === 'setup-go') { const p = readProfile(); if (!p) return; M.profile = p; saveMeta(); newGame(); render(); checkAttendance(); }
     else if (a === 'report') { if (S && !['title', 'setup'].includes(S.view.type)) report(); }
     else if (a === 'report-share') shareReport();
     else if (a === 'profile') editProfile();
@@ -900,22 +957,13 @@
     }
   }
 
-  function today() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
-  function streak() {
-    const t = today();
-    const y = new Date(Date.now() - 864e5);
-    const yd = `${y.getFullYear()}-${y.getMonth() + 1}-${y.getDate()}`;
-    const s = M.streak || { last: '', n: 0 };
-    if (s.last !== t) { s.n = s.last === yd ? s.n + 1 : 1; s.last = t; }
-    M.streak = s;
-    saveMeta();
-  }
+  function dayKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function today() { return dayKey(new Date()); }
 
   function boot() {
     if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) document.documentElement.classList.add('standalone');
     M = restore(C.metaKey) || { endings: {}, runs: 0 };
     if (T.Sound) T.Sound.on = M.sound !== false;
-    streak();
     S = restore(C.saveKey);
     const canvas = $('#scene');
     ctx = canvas.getContext('2d');
@@ -928,15 +976,17 @@
       newGame();
       S.view = { type: 'title' };
       render();
+      checkAttendance();
     } else {
       migrate(S);
       render();
+      checkAttendance();
       offline();
     }
     setInterval(() => { if (document.hidden) return; frame++; paint(); }, 170);
     setInterval(tick, 1000);
     setInterval(save, 10000);
-    document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else offline(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else { checkAttendance(); offline(); } });
     window.addEventListener('pagehide', save);
   }
 
