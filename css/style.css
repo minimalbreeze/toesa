@@ -57,7 +57,12 @@ html.standalone #app {
 
 /* ── 상태판 ── */
 #hud { color: var(--on-night); display: grid; gap: 6px; }
-.hud-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--on-night-muted); }
+.hud-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--on-night-muted); }
+#h-date { margin-right: auto; }
+#h-pass { color: var(--gold); white-space: nowrap; }
+#h-pass .dots { letter-spacing: 1px; }
+#btn-sound { background: transparent; border: 2px solid var(--on-night-muted); color: var(--on-night-muted); font-size: 11px; padding: 0 6px; cursor: pointer; }
+#btn-sound[aria-pressed="false"] { opacity: .6; text-decoration: line-through; }
 .chip { background: var(--paper); color: var(--ink); padding: 0 8px; border: 2px solid var(--ink); font-size: 12px; font-weight: 700; }
 .hud-time { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .hud-time b { font-size: 26px; line-height: 1; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
@@ -128,6 +133,12 @@ html.standalone #app {
 .d.zero { color: var(--muted); }
 .d:nth-child(2) { animation-delay: .08s; } .d:nth-child(3) { animation-delay: .16s; } .d:nth-child(4) { animation-delay: .24s; }
 
+.twist { align-self: flex-start; background: var(--stamp); color: var(--paper-hi); font-weight: 700; font-size: 13px; padding: 1px 10px; transform: rotate(-2deg); animation: shake .4s steps(4); }
+.gate-clock { padding: 10px 12px; border: 2px dashed var(--ink); background: var(--paper-hi); font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
+.gate-clock b { font-size: 22px; display: block; letter-spacing: 1px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.warn { margin: 0; padding: 8px 10px; background: #fde4df; border: 2px solid var(--stamp); font-size: 14px; }
+.warn b { color: var(--stamp); margin-right: 4px; }
 .levelup { margin: 0; padding: 8px 10px; background: #fff3cf; border: 2px dashed #b8892a; font-size: 14px; }
 .levelup b { color: #8a5d00; margin-right: 4px; }
 
@@ -213,6 +224,7 @@ html.standalone #app {
 @keyframes slide { from { transform: translateY(8px); opacity: .4; } to { transform: none; opacity: 1; } }
 @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes blink { 50% { opacity: .3; } }
+@keyframes shake { 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(-2deg); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
