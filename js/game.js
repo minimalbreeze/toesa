@@ -883,7 +883,7 @@
     else if (a === 'close') closeSheet();
     else if (a === 'share') share();
     else if (a === 'sound') { M.sound = M.sound === false; T.Sound.on = M.sound; saveMeta(); hud(); if (M.sound) sfx('good'); }
-    else if (a === 'restart') { closeSheet(); newGame(); render(); }
+    else if (a === 'restart') { closeSheet(); newGame(); S.view = { type: 'title' }; render(); }
   }
 
   function onKey(e) {
