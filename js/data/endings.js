@@ -1,7 +1,7 @@
 // 엔딩 3개. 사직서 버튼을 누를 때 조건을 본다.
 //   freedom: 현금이 CONFIG.freedomGoal 이상
 //   boss:    부업 하나가 CONFIG.maxSideLevel
-//   rehire:  조건 없이 던진 사직서, 또는 멘탈 0 (burnout)
+//   rehire:  조건 없이 던진 사직서, 멘탈 0 (burnout), 평가 경고 누적 (fired)
 
 T.ENDINGS = {
   freedom: {
@@ -30,6 +30,7 @@ T.ENDINGS = {
     title: '재취업 엔딩',
     line: '홧김에 던진 사직서.',
     burnoutLine: '멘탈이 0이 됐다. 정신을 차려 보니 사직서를 내고 있었다.',
+    firedLine: '인사팀이 조용히 불렀다. "이번 평가 결과 말인데요…" 권고사직이었다.',
     body: [
       '세 달을 쉬었다. 통장이 바닥났다.',
       '새 회사 첫 출근 날.',

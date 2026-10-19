@@ -9,11 +9,14 @@
 ## 파일
 | 파일 | 내용 |
 |---|---|
-| `js/data/events.js` | 선택형 이벤트 30개. 문장을 고치려면 여기만 |
+| `js/data/events.js` | 공통 이벤트 85개. 문장을 고치려면 여기만 |
+| `js/data/dept-events.js` | 부서 목록과 부서별 이벤트 (8개 부서 × 5개) |
+| `js/data/report.js` | 내 회사생활 리포트·근무 일지 문장 |
 | `js/data/sidejobs.js` | 부업 3종과 레벨업 문구 |
 | `js/data/endings.js` | 엔딩 3개 |
 | `js/data/config.js` | 밸런스 숫자 전부 (월급, 생활비, 퇴사 조건…) |
-| `js/sprites.js` | 픽셀 그림 (캐릭터는 글자 격자) |
+| `js/sprites.js` | 픽셀 그림 (캐릭터는 글자 격자, 장면 11개) |
+| `js/sound.js` | 효과음 (Web Audio, 파일 없음) |
 | `js/game.js` | 진행 로직, 저장, 화면 |
 | `css/style.css` | 화면 모양 |
 | `scripts/make-icons.py` | 아이콘 4종 + iOS 아이콘 다시 만들기 |
@@ -24,6 +27,7 @@
 
 ## 로컬에서 보기
 아무 정적 서버로 연다. 예: `npx serve .`
+주소 끝에 `#test`를 붙이면 출근 도장 제한 없이 테스트할 수 있다.
 콘솔에서 `TT.state()`로 현재 상태를 볼 수 있고, `TT.reset()`으로 처음부터 시작한다.
 
 ## 글꼴
