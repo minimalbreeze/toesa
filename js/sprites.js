@@ -330,6 +330,24 @@
     person(ctx, 'player', 52, 44, f, { shades: true });
   }
 
+  function farm(ctx, f) {
+    rect(ctx, 0, 0, W, 44, '#9fd8ff');
+    rect(ctx, 0, 30, W, 14, '#c9ecff');
+    rect(ctx, 92, 8, 10, 10, '#ffe27a');
+    // 먼 산
+    for (let x = 0; x < W; x++) { const h = 6 + Math.round(4 * Math.sin(x / 9)); rect(ctx, x, 44 - h, 1, h, '#7cb98a'); }
+    rect(ctx, 0, 44, W, H - 44, '#8fc46a');
+    // 밭고랑
+    for (let y = 50; y < H; y += 6) { rect(ctx, 0, y, W, 2, '#6f9e4e'); for (let x = (y % 12); x < W; x += 12) rect(ctx, x, y - 2, 3, 2, '#4f8a3a'); }
+    // 작은 집
+    rect(ctx, 8, 28, 26, 18, PAL.k); rect(ctx, 9, 29, 24, 16, '#f0d9b5');
+    for (let i = 0; i < 14; i++) rect(ctx, 6 + i, 28 - i / 2 | 0, 30 - i * 2, 1, '#c23b2a');
+    rect(ctx, 18, 36, 6, 10, '#94653f');
+    person(ctx, 'player', 54, 42, f, {});
+    // 밀짚모자
+    rect(ctx, 52, 41 + (Math.floor(f / 3) % 2), 20, 2, '#e3c08b'); rect(ctx, 56, 38 + (Math.floor(f / 3) % 2), 12, 3, '#e3c08b');
+  }
+
   function shop(ctx, f) {
     rect(ctx, 0, 0, W, H, '#cfe6f0');
     rect(ctx, 10, 14, 100, 52, '#fbfaf5');
@@ -603,6 +621,7 @@
       case 'home': home(ctx, f, o); break;
       case 'beach': beach(ctx, f); break;
       case 'shop': shop(ctx, f); break;
+      case 'farm': farm(ctx, f); break;
       case 'elevator': elevator(ctx, f, o); break;
       case 'meeting': meeting(ctx, o.phase || 'am', f, o); break;
       case 'subway': subway(ctx, f, o); break;

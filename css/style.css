@@ -82,7 +82,7 @@ html.standalone #app {
 
 .nums { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
 .nums div { display: grid; }
-.nums label { font-size: 11px; color: var(--on-night-muted); letter-spacing: .5px; }
+.nums label { font-size: 11px; color: var(--on-night-muted); letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nums b { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #h-cash { color: #8fe0b0; }
 #h-cash.neg { color: #ff9c8a; }
@@ -175,6 +175,18 @@ html.standalone #app {
 .plus { color: var(--money); }
 .minus { color: var(--stamp); }
 .slip-f { margin-top: 6px; padding-top: 6px; border-top: 2px solid var(--ink); text-align: right; font-weight: 700; }
+
+/* 연재 이야기·내일 예고·퇴사 계획 */
+.arc { align-self: flex-start; font-size: 12px; color: #8a5d00; background: #fff3cf; border: 2px solid #b8892a; padding: 1px 8px; }
+.arc span { margin-left: 4px; color: var(--muted); }
+.arc-next { margin: 0; font-size: 13px; color: #8a5d00; }
+.teaser { background: var(--ink); color: var(--paper-hi); padding: 10px 12px; display: grid; gap: 4px; }
+.teaser b { font-size: 12px; color: var(--gold); letter-spacing: 2px; }
+.teaser p { margin: 0; font-size: 14px; line-height: 1.6; }
+.plan { background: var(--paper-hi); border: 2px solid var(--ink); padding: 8px 10px; }
+.plan b { font-size: 16px; }
+.plan p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.form-custom { display: grid; gap: 6px; }
 
 /* 출근 도장판 */
 .stamps { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }

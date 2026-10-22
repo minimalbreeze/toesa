@@ -2,6 +2,13 @@
 (function () {
   const C = T.CONFIG;
   const EV = Object.fromEntries(T.EVENTS.map((e) => [e.id, e]));
+  // 연재 이야기의 장면도 이벤트처럼 꺼내 쓸 수 있게 등록한다 (id: 이야기id#장면번호)
+  const STORY = Object.fromEntries(T.STORIES.map((st) => [st.id, st]));
+  T.STORIES.forEach((st) => st.steps.forEach((step, i) => {
+    const id = `${st.id}#${i}`;
+    EV[id] = Object.assign({ who: 'none' }, step, { id, story: st.id, stepIndex: i });
+  }));
+  const DREAM = Object.fromEntries(T.DREAMS.map((d) => [d.id, d]));
   const JOB = Object.fromEntries(T.SIDEJOBS.map((j) => [j.id, j]));
   const ORDER = ['eval', 'hp', 'mental', 'cash', 'salary', 'living', 'side'];
   const LABEL = { eval: '평가', hp: '체력', mental: '멘탈', cash: '현금', salary: '월급', living: '생활비', side: '부업 진도', sideIncome: '부업 수입' };
@@ -36,6 +43,7 @@
       scale, livingBase: p.expense ? p.expense * 10000 : Math.round(C.living * ratio),
       goal: Math.max(5e7, Math.round(C.freedomGoal * ratio / 1e7) * 1e7),
       traits: {}, dayLog: [],
+      dayNo: 0, story: null, storiesDone: [], storyRest: 0,
       side: Object.fromEntries(T.SIDEJOBS.map((j) => [j.id, { lvl: 0, prog: 0 }])),
       focus: 'blog',
       // 첫 판은 튜토리얼 없이 퇴근 5분 전 부장님으로 바로 시작한다 (첫날 출근 도장 1개 사용)
@@ -55,6 +63,7 @@
     if (s.scale == null) { s.scale = 1; s.livingBase = C.living; s.goal = C.freedomGoal; }
     if (!s.traits) s.traits = {};
     if (!s.dayLog) s.dayLog = [];
+    if (s.dayNo == null) { s.dayNo = (s.month - 1) * C.daysPerMonth + s.day; s.story = null; s.storiesDone = []; s.storyRest = 0; }
     return s;
   }
 
@@ -73,7 +82,7 @@
     const d = T.DEPTS.find((x) => x.id === p.dept);
     return d ? d.name : '우리 팀';
   }
-  const fmt = (t) => String(t).replace(/\{회사\}/g, company()).replace(/\{부서\}/g, deptName());
+  const fmt = (t) => String(t).replace(/\{회사\}/g, company()).replace(/\{부서\}/g, deptName()).replace(/\{꿈\}/g, dreamName());
   const need = (lvl) => (lvl + 1) * C.sideNeed;
   const condition = () => (S.hp + S.mental) / 2;
   function hourly(id, lvl) {
@@ -83,7 +92,32 @@
   }
   const hourlyTotal = () => T.SIDEJOBS.reduce((a, j) => a + hourly(j.id), 0);
   const maxLvl = () => Math.max(...T.SIDEJOBS.map((j) => S.side[j.id].lvl));
-  const goalPct = () => clamp(Math.max(S.cash / goal(), maxLvl() / C.maxSideLevel), 0, 1);
+  // ───────── 퇴사 계획서 (꿈) ─────────
+  const dream = () => DREAM[profile().dream] || DREAM.rest;
+  function dreamName() {
+    const p = profile();
+    return dream().id === 'custom' ? (p.dreamName || '내 꿈') : dream().name;
+  }
+  function dreamNeed() {
+    const d = dream(), p = profile();
+    const c = d.cash;
+    const cash = c === 'living12' ? living() * 12 : c === 'living6' ? living() * 6 : c === 'goal' ? goal()
+      : c === 'custom' ? (p.dreamCost || 3000) * 10000 : c;
+    return { cash: Math.round(cash / 10000) * 10000, side: d.side || null };
+  }
+  function sideBest(ids) { return Math.max(...ids.map((id) => S.side[id].lvl)); }
+  function dreamParts() {
+    const n = dreamNeed();
+    const parts = [{ label: '현금', have: S.cash, need: n.cash, pct: clamp(S.cash / n.cash, 0, 1), money: true }];
+    if (n.side) {
+      const have = sideBest(n.side.ids);
+      parts.push({ label: n.side.ids.map((id) => JOB[id].name).join('·') + ' 레벨', have, need: n.side.lvl, pct: clamp(have / n.side.lvl, 0, 1) });
+    }
+    return parts;
+  }
+  const dreamReady = () => dreamParts().every((x) => x.pct >= 1);
+  // 여러 조건이 있으면 평균으로 진행률을 보여 준다
+  const goalPct = () => { const ps = dreamParts(); return ps.reduce((a, x) => a + x.pct, 0) / ps.length; };
 
   // 좋은 결과인지 나쁜 결과인지 대충 점수로 본다 (표정·효과음·운 보정에 쓴다)
   function score(fx) {
@@ -273,8 +307,42 @@
     return s >= 4 ? 'happy' : s <= -4 ? 'sad' : '';
   }
 
+  // ───────── 연재 이야기 ─────────
+  function storyStep() {
+    if (!S.story) return null;
+    return EV[`${S.story.id}#${S.story.step}`];
+  }
+  // 이야기가 없으면 밤에 다음 이야기를 정해 둔다 (그래야 근무 일지에 "내일 예고"가 뜬다)
+  function planStory() {
+    if (S.story || S.dayNo < S.storyRest) return;
+    const pool = T.STORIES.filter((st) => !S.storiesDone.includes(st.id) && (!st.when || st.when(S)));
+    if (!pool.length) return;
+    S.story = { id: rnd(pool).id, step: 0, due: S.dayNo + 1 };
+  }
+  function advanceStory(opt) {
+    const st = STORY[S.story.id];
+    const nextIdx = opt.end ? st.steps.length : (opt.next != null ? opt.next : S.story.step + 1);
+    if (nextIdx >= st.steps.length) {
+      S.storiesDone.push(st.id);
+      S.story = null;
+      S.storyRest = S.dayNo + 1 + C.storyGap;
+      return { done: true, title: st.title };
+    }
+    S.story = { id: st.id, step: nextIdx, due: S.dayNo + (st.steps[nextIdx].delay || 1) };
+    return { done: false, title: st.title };
+  }
+  function teaser() {
+    const step = storyStep();
+    if (!step) return '';
+    const left = S.story.due - S.dayNo;
+    if (left <= 1) return step.teaser || `「${STORY[S.story.id].title}」 이야기가 내일 이어진다.`;
+    return `「${STORY[S.story.id].title}」 이야기는 ${left}일 뒤에 이어진다.`;
+  }
+
   function pickEvent() {
     const ph = T.PHASES[S.phase].id;
+    const step = storyStep();
+    if (step && S.story.due <= S.dayNo && step.phase === ph) return step.id;
     const dept = profile().dept;
     const ok = (id) => EV[id] && EV[id].phase === ph && (EV[id].minMonth || 0) <= S.month && (!EV[id].dept || EV[id].dept === dept);
     // 시간대마다 이벤트 주머니를 섞어 두고 하나씩 꺼낸다. 다 꺼내기 전에는 같은 이벤트가 다시 안 나온다.
@@ -310,9 +378,10 @@
     S.seen[ev.id] = (S.seen[ev.id] || 0) + 1;
     traitOf(fx, !!opt.rolls);
     log(fmt(opt.label), d.list, sh.twist);
+    const arc = ev.story ? advanceStory(opt) : null;
     S.view = {
       type: 'result', text, picked: opt.label, deltas: d.list, ups: d.ups, blocked: d.blocked,
-      twist: sh.twist, after: 'phase',
+      twist: sh.twist, after: 'phase', arc,
       scene: Object.assign(sceneOfEvent(ev), { face: faceFor(sh.fx, sh.twist) }),
     };
     sfx(sh.twist ? 'twist' : score(sh.fx) >= 0 ? 'good' : 'bad');
@@ -329,7 +398,8 @@
       if (T.PHASES[S.phase].id === 'evening') S.view = { type: 'evening' };
       else S.view = { type: 'event', id: pickEvent() };
     } else if (after === 'night' || after === 'collapse') {
-      S.view = { type: 'daylog', log: S.dayLog, month: S.month, day: S.day, after: 'endday' };
+      planStory();
+      S.view = { type: 'daylog', log: S.dayLog, month: S.month, day: S.day, teaser: teaser(), after: 'endday' };
       S.dayLog = [];
     } else if (after === 'endday') {
       endDay();
@@ -399,6 +469,7 @@
     S.hp = clamp(S.hp + C.nightRecover.hp, 0, 100);
     S.mental = clamp(S.mental + C.nightRecover.mental, 0, 100);
     S.day++;
+    S.dayNo++;
     S.phase = 0;
     if (S.day >= C.daysPerMonth) payday();
     else startDay();
@@ -428,10 +499,11 @@
 
   function ending(id, reason) {
     M.endings = M.endings || {};
-    M.endings[id] = (M.endings[id] || 0) + 1;
+    const key = id === 'dream' ? 'dream:' + dream().id : id;
+    M.endings[key] = (M.endings[key] || 0) + 1;
     saveMeta();
     closeSheet();
-    S.view = { type: 'ending', id, reason: reason || '' };
+    S.view = { type: 'ending', id, reason: reason || '', dream: dream().id, dreamName: dreamName() };
     sfx('stamp'); setTimeout(() => sfx('ending'), 250);
     save(); render();
   }
@@ -520,6 +592,18 @@
     return { scene: ev.scene || 'office', prop: ev.prop, phase, who: ev.who };
   }
 
+  // 꿈 엔딩은 dreams.js에서, 나머지는 endings.js에서 가져온다
+  function endingOf(v) {
+    if (v.id === 'dream') {
+      const d = DREAM[v.dream] || DREAM.rest;
+      const name = v.dreamName || d.name;
+      const sub = (t) => String(t).replace(/\{꿈\}/g, name);
+      return { title: sub(d.ending.title), line: sub(d.ending.line), body: d.ending.body.map(sub), scene: d.scene };
+    }
+    return T.ENDINGS[v.id] || T.ENDINGS.rehire;
+  }
+  const shortName = (t, n) => (t.length > n ? t.slice(0, n) + '…' : t);
+
   function sceneFor(v) {
     if (v.scene) return v.scene;
     const phase = T.PHASES[S.phase] ? T.PHASES[S.phase].id : 'am';
@@ -532,7 +616,7 @@
       case 'daylog': return { scene: 'home', mode: 'rest' };
       case 'setup': return { scene: 'office', phase: 'morning' };
       case 'payday': return { scene: 'office', phase: 'off', mode: 'pay', face: 'happy' };
-      case 'ending': return T.ENDINGS[v.id].scene === 'office' ? { scene: 'elevator', who: 'boss', face: 'shock' } : { scene: T.ENDINGS[v.id].scene };
+      case 'ending': { const sc = endingOf(v).scene; return sc === 'office' ? { scene: 'elevator', who: 'boss', face: 'shock' } : { scene: sc, mode: sc === 'home' ? 'rest' : undefined }; }
     }
     return { scene: 'office', phase };
   }
@@ -556,6 +640,7 @@
     $('#h-cash').classList.toggle('neg', S.cash < 0);
     $('#h-eval').textContent = `${S.eval}`;
     $('#h-goal').textContent = `${Math.floor(goalPct() * 100)}%`;
+    $('#h-goal-label').textContent = `${shortName(dream().id === 'custom' ? dreamName() : dream().short, 5)}까지`;
     const h = hourlyTotal();
     const focus = JOB[S.focus];
     $('#sidebank').innerHTML = h
@@ -583,11 +668,11 @@
     if (v.type === 'title') {
       html = `
         <h1 class="logo">퇴사하고 싶다<small>: 오늘도 버텼다</small></h1>
-        <p>평범한 직장인. 목표는 하나, 퇴사.</p>
-        <p class="muted">회사를 버틸지, 회사를 벗어날지. 매일의 선택이 결말을 바꾼다. 다만 회사는 마음대로 되는 게 하나도 없다.</p>
+        <p>평범한 직장인. 퇴사하고 하고 싶은 게 하나 있다.</p>
+        <p class="muted">그 꿈을 위해 회사를 버틸지, 벗어날지. 매일의 선택이 결말을 바꾼다. 다만 회사는 마음대로 되는 게 하나도 없다.</p>
         <button class="btn primary" data-act="setup">내 회사로 입사하기</button>
         <button class="btn" data-act="start">그냥 입사하기</button>
-        <p class="muted">"내 회사로"를 고르면 회사 이름·부서·연차·직급·월급을 넣고 시작해. 부서에 따라 에피소드가 달라지고, 나중에 내 회사생활 리포트에 쓰여.</p>`;
+        <p class="muted">"내 회사로"를 고르면 회사·부서·연차·직급·월급과 <b>퇴사하고 하고 싶은 것</b>을 정하고 시작해. "그냥 입사하기"는 꿈이 "1년 쉬기"로 정해져.</p>`;
     } else if (v.type === 'setup') {
       html = `<div class="who">입사 서류</div>${profileForm()}
         <button class="btn primary" data-act="setup-go">이대로 입사하기</button>
@@ -595,7 +680,9 @@
     } else if (v.type === 'event') {
       const ev = EV[v.id];
       if (ev.who === 'phone') sfx('phone');
+      const arcTag = ev.story ? `<div class="arc">이어지는 이야기 · ${esc(STORY[ev.story].title)} <span>${ev.stepIndex + 1}/${STORY[ev.story].steps.length}</span></div>` : '';
       html = `
+        ${arcTag}
         ${T.WHO[ev.who] ? `<div class="who">${T.WHO[ev.who]}</div>` : ''}
         <p class="text">${para(fmt(ev.text))}</p>
         <div class="choices">${ev.options.map((o, i) => `
@@ -611,6 +698,7 @@
         <p class="text">${para(fmt(v.text))}</p>
         ${(v.ups || []).map((u) => `<p class="levelup"><b>${JOB[u.id].name} Lv.${u.lvl}</b> ${esc(u.line)}${u.cost ? ` <span class="muted">(재고비 -${man(u.cost)})</span>` : ''}</p>`).join('')}
         <div class="deltas">${v.deltas.map(chip).join('')}</div>
+        ${v.arc ? `<p class="arc-next">${v.arc.done ? `「${esc(v.arc.title)}」 이야기 끝.` : `「${esc(v.arc.title)}」 이야기는 계속된다…`}</p>` : ''}
         <button class="btn primary" data-act="next">${v.after === 'night' || v.after === 'collapse' ? '오늘의 근무 일지 ›' : '다음 ›'}</button>`;
     } else if (v.type === 'daylog') {
       html = daylog(v);
@@ -669,8 +757,10 @@
         ${s.warn ? `<p class="warn"><b>인사팀 경고 ${s.warn}/${C.warnLimit}</b> 평가가 ${C.warnBelow} 아래다. ${s.warn >= C.warnLimit ? '인사팀에서 면담하자는 메일이 왔다.' : `다음 월급날에도 이러면 권고사직이다.`}</p>` : ''}
         <button class="btn primary" data-act="next">${s.warn >= C.warnLimit ? '면담하러 간다 ›' : '다음 달도 버틴다 ›'}</button>`;
     } else if (v.type === 'ending') {
-      const e = T.ENDINGS[v.id];
+      const e = endingOf(v);
       const got = M.endings || {};
+      const dex = T.DREAMS.map((d) => ({ key: 'dream:' + d.id, label: d.id === 'custom' ? '내 꿈' : d.ending.title.replace(' 엔딩', '') }))
+        .concat([{ key: 'rehire', label: '재취업' }]);
       const best = T.SIDEJOBS.reduce((a, j) => (S.side[j.id].lvl > S.side[a].lvl ? j.id : a), 'blog');
       html = `
         <div class="who stamp-label">사직서 수리됨</div>
@@ -680,8 +770,8 @@
         <div class="summary">
           <span>${esc(company())}</span><span>입사 ${S.month}개월</span><span>${C.ranks[S.rank].name}</span><span>${won(S.cash)}</span><span>${JOB[best].name} Lv.${S.side[best].lvl}</span>
         </div>
-        <div class="dex"><b>엔딩 도감 ${Object.keys(got).length}/${Object.keys(T.ENDINGS).length}</b>
-          ${Object.keys(T.ENDINGS).map((k) => `<span class="${got[k] ? 'got' : ''}">${got[k] ? T.ENDINGS[k].title.replace(' 엔딩', '') : '???'}</span>`).join('')}
+        <div class="dex"><b>엔딩 도감 ${dex.filter((x) => got[x.key]).length}/${dex.length}</b>
+          ${dex.map((x) => `<span class="${got[x.key] ? 'got' : ''}">${got[x.key] ? x.label : '???'}</span>`).join('')}
         </div>
         <div class="row">
           <button class="btn" data-act="share">결과 공유하기</button>
@@ -718,7 +808,8 @@
         <div class="log-sum"><b>오늘 합계</b><div class="deltas">${total}</div></div>
         <p class="log-line">“${esc(line)}”</p>
       </div>
-      <p class="muted">${tomorrow}${M.streak && M.streak.n > 1 ? ` · 실제로 ${M.streak.n}일 연속 출근 중` : ''}</p>
+      ${v.teaser ? `<div class="teaser"><b>내일 예고</b><p>${esc(fmt(v.teaser))}</p></div>` : ''}
+      <p class="muted">${esc(dreamName())}까지 ${Math.floor(goalPct() * 100)}% · ${tomorrow}${M.streak && M.streak.n > 1 ? ` · 실제로 ${M.streak.n}일 연속 출근 중` : ''}</p>
       <button class="btn primary" data-act="next">잠자리에 든다 ›</button>
       <button class="btn ghost" data-act="report">내 회사생활 리포트 보기</button>`;
   }
@@ -742,6 +833,13 @@
         </div>
         <label for="p-expense">한 달 고정지출 <span class="opt">선택</span></label>
         <div class="form-unit"><input id="p-expense" type="number" inputmode="numeric" min="0" max="5000" value="${p.expense || ''}" placeholder="월세·식비·통신비 등"><small>만 원</small></div>
+        <label for="p-dream">퇴사하고 하고 싶은 것</label>
+        <select id="p-dream">${T.DREAMS.map((d) => `<option value="${d.id}"${d.id === p.dream ? ' selected' : ''}>${d.name}</option>`).join('')}</select>
+        <p class="muted" id="p-dream-desc">${esc((DREAM[p.dream] || DREAM.rest).desc)}</p>
+        <div class="form-custom"${p.dream === 'custom' ? '' : ' hidden'}>
+          <input id="p-dreamname" type="text" maxlength="16" value="${esc(p.dreamName || '')}" placeholder="예: 동네 책방 열기">
+          <div class="form-unit"><input id="p-dreamcost" type="number" inputmode="numeric" min="100" max="100000" value="${p.dreamCost || ''}" placeholder="필요한 돈"><small>만 원</small></div>
+        </div>
         <p class="muted">입력한 내용은 이 기기에만 저장되고 어디로도 보내지 않아. 비워 두면 기본값을 써.</p>
         <p class="form-err" id="p-err" hidden></p>
       </div>`;
@@ -762,11 +860,16 @@
       rank: $('#p-rank').value === '' ? null : Number($('#p-rank').value),
       salary: num('#p-salary', 100, 5000),
       expense: num('#p-expense', 0, 5000),
+      dream: $('#p-dream').value,
+      dreamName: $('#p-dreamname').value.trim(),
+      dreamCost: num('#p-dreamcost', 100, 100000),
     };
     const err = [];
     if (Number.isNaN(p.years)) err.push('연차는 1~40 사이 숫자로 적어 줘.');
     if (Number.isNaN(p.salary)) err.push('월 실수령은 만 원 단위로 100~5000 사이로 적어 줘. 예: 320');
     if (Number.isNaN(p.expense)) err.push('고정지출은 만 원 단위 숫자로 적어 줘. 예: 180');
+    if (p.dream === 'custom' && !p.dreamName) err.push('하고 싶은 걸 한 줄로 적어 줘.');
+    if (p.dream === 'custom' && (Number.isNaN(p.dreamCost) || !p.dreamCost)) err.push('꿈에 필요한 돈을 만 원 단위로 적어 줘. 예: 5000');
     if (err.length) { const e = $('#p-err'); e.textContent = err.join(' '); e.hidden = false; return null; }
     if (!p.years) p.years = C.defaultProfile.years;
     return p;
@@ -774,7 +877,7 @@
 
   function editProfile() {
     sheet(`<h3>내 정보 고치기</h3>${profileForm()}
-      <p class="muted">회사·부서는 바로 바뀌어. 연차·직급·월급·고정지출은 리포트에는 바로, 게임 속 직급·월급에는 다음 입사부터 반영돼.</p>
+      <p class="muted">회사·부서·꿈은 바로 바뀌어. 연차·직급·월급·고정지출은 리포트에는 바로, 게임 속 직급·월급에는 다음 입사부터 반영돼.</p>
       <button class="btn primary" data-act="profile-save">저장</button>
       <button class="btn ghost" data-act="close">닫기</button>`);
   }
@@ -798,6 +901,30 @@
     const sideMonth = hourlyTotal() * C.dayIncomeHours * C.daysPerMonth;
     r.dependency = salary() / (salary() + sideMonth);
     return { p, r };
+  }
+
+  // 꿈까지 남은 것: 게임 속 페이스와, 실제 숫자를 넣었다면 현실 페이스
+  function planBlock(p, r) {
+    const parts = dreamParts();
+    const rows = parts.map((x) => `<li><span>${x.label}</span><b>${x.money ? man(Math.max(0, x.have)) + ' / ' + man(x.need) : 'Lv.' + x.have + ' / ' + x.need}</b><em class="${x.pct >= 1 ? 'good' : ''}">${Math.floor(x.pct * 100)}%</em></li>`).join('');
+    const monthSave = salary() - living() + hourlyTotal() * C.dayIncomeHours * C.daysPerMonth;
+    const gap = Math.max(0, parts[0].need - S.cash);
+    const gameMonths = gap <= 0 ? 0 : monthSave > 0 ? Math.ceil(gap / monthSave) : null;
+    const game = gap <= 0 ? '현금은 이미 모였다. 남은 조건만 채우면 사직서를 낼 수 있다.'
+      : gameMonths ? `지금 게임 페이스(월급 − 생활비 + 부업)면 현금은 약 ${gameMonths}개월 뒤에 모인다. 실제로는 하루에 하루씩이라 약 ${gameMonths * C.daysPerMonth}일 걸린다.`
+      : '지금 게임 페이스로는 돈이 모이지 않는다. 생활비가 월급보다 크다.';
+    let realLine = '';
+    if (r.save != null) {
+      const d = dream();
+      const realNeed = d.cash === 'living12' ? p.expense * 12 : d.cash === 'living6' ? p.expense * 6 : d.cash === 'custom' ? (p.dreamCost || 0)
+        : d.cash === 'goal' ? r.fiTarget : d.cash / 10000;
+      const months = r.save > 0 ? Math.ceil(realNeed / r.save) : null;
+      realLine = `<p class="muted">현실에서는: ${esc(dreamName())}에 약 ${man(realNeed * 10000)}이 필요하다. 한 달에 ${man(r.save * 10000)}씩 모으면 ${months ? `약 ${months}개월(${(months / 12).toFixed(1)}년)` : '모을 수 없다'}. 투자 수익과 지금까지 모은 돈은 빼고 단순 계산했어.</p>`;
+    }
+    const desc = dream().id === 'custom' ? `직접 정한 꿈. 필요한 돈 ${man(dreamNeed().cash)}.` : dream().desc;
+    return `<div class="plan"><b>${esc(dreamName())}</b><p>${esc(desc)}</p></div>
+      <ul class="checks">${rows}</ul>
+      <p class="muted">${game}</p>${realLine}`;
   }
 
   function report() {
@@ -832,8 +959,10 @@
           ${check('멘탈', S.mental, S.mental < 35, S.mental >= 70)}
           ${check('평가', S.eval + (S.warns ? ` (경고 ${S.warns})` : ''), S.eval < C.warnBelow + 10, S.eval >= C.promoteAt - 15)}
           ${check('월급 의존도', pct(r.dependency), r.dependency > 0.9, r.dependency < 0.6)}
-          ${check('퇴사 게이지', pct(goalPct()), goalPct() < 0.1, goalPct() >= 0.6)}
+          ${check(esc(shortName(dreamName(), 8)) + '까지', pct(goalPct()), goalPct() < 0.1, goalPct() >= 0.6)}
         </ul>
+        <h4>내 퇴사 계획</h4>
+        ${planBlock(p, r)}
         <h4>내 실제 숫자</h4>
         ${real}
         <h4>바꿀 수 있는 것</h4>
@@ -863,30 +992,27 @@
   // ───────── 사직서 ─────────
   function resign() {
     if (!S || ['ending', 'title'].includes(S.view.type)) return;
-    const freedom = S.cash >= goal();
-    const boss = maxLvl() >= C.maxSideLevel;
-    const cashPct = clamp(S.cash / goal(), 0, 1) * 100;
-    const lvPct = maxLvl() / C.maxSideLevel * 100;
+    const ready = dreamReady();
+    const parts = dreamParts();
     sheet(`
       <h3>사직서</h3>
       <p class="muted">어떤 사직서를 낼까?</p>
       <div class="resign">
-        <button class="rs" data-act="end" data-id="freedom" ${freedom ? '' : 'disabled'}>
-          <b>경제적 자유</b><span>현금 ${man(Math.max(0, S.cash))} / ${man(goal())}</span><span class="jbar"><i style="width:${cashPct}%"></i></span>
-        </button>
-        <button class="rs" data-act="end" data-id="boss" ${boss ? '' : 'disabled'}>
-          <b>사업가</b><span>부업 최고 Lv.${maxLvl()} / ${C.maxSideLevel}</span><span class="jbar"><i style="width:${lvPct}%"></i></span>
+        <button class="rs" data-act="end" data-id="dream" ${ready ? '' : 'disabled'}>
+          <b>${esc(dreamName())}</b>
+          ${parts.map((x) => `<span>${x.label} ${x.money ? man(Math.max(0, x.have)) + ' / ' + man(x.need) : 'Lv.' + x.have + ' / ' + x.need}</span><span class="jbar"><i style="width:${x.pct * 100}%"></i></span>`).join('')}
         </button>
         <button class="rs angry" data-act="end" data-id="rehire">
-          <b>홧김에 던진다</b><span>${freedom || boss ? '조건은 됐는데… 그래도 홧김에?' : '아직 준비가 안 됐다. 그래도 던질래?'}</span>
+          <b>홧김에 던진다</b><span>${ready ? '꿈이 눈앞인데… 그래도 홧김에?' : '아직 준비가 안 됐다. 그래도 던질래?'}</span>
         </button>
       </div>
+      <p class="muted">꿈은 리포트의 "내 정보 고치기"에서 바꿀 수 있어.</p>
       <button class="btn ghost" data-act="close">서랍에 다시 넣는다</button>`);
   }
 
   // ───────── 공유 ─────────
   async function share() {
-    const e = T.ENDINGS[S.view.id];
+    const e = endingOf(S.view);
     const url = /^https?:/.test(location.href) && !/claude|localhost|127\./.test(location.host) ? location.href.split('#')[0] : C.shareUrl;
     const text = `나는 ${company()} 입사 ${S.month}개월 만에 「${e.title}」으로 퇴사했다.\n#퇴사하고싶다 #오늘도버텼다`;
     try { if (navigator.share) { await navigator.share({ title: '퇴사하고 싶다', text, url }); return; } } catch (err) { if (err && err.name === 'AbortError') return; }
@@ -970,7 +1096,13 @@
     ctx.imageSmoothingEnabled = false;
     document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKey);
-    document.addEventListener('change', (e) => { if (e.target.id === 'p-dept') $('#p-deptname').hidden = e.target.value !== 'etc'; });
+    document.addEventListener('change', (e) => {
+      if (e.target.id === 'p-dept') $('#p-deptname').hidden = e.target.value !== 'etc';
+      if (e.target.id === 'p-dream') {
+        $('#p-dream-desc').textContent = (DREAM[e.target.value] || DREAM.rest).desc;
+        $('.form-custom').hidden = e.target.value !== 'custom';
+      }
+    });
     document.addEventListener('pointerdown', () => T.Sound && T.Sound.unlock(), { once: true });
     if (!S || S.v !== 1) {
       newGame();
@@ -991,7 +1123,7 @@
   }
 
   // 테스트용 (콘솔에서 TT.state() 등)
-  window.TT = { state: () => S, meta: () => M, events: EV, reset: () => { try { localStorage.removeItem(C.saveKey); } catch (e) { /* 무시 */ } location.reload(); } };
+  window.TT = { state: () => S, meta: () => M, events: EV, render: () => render(), reset: () => { try { localStorage.removeItem(C.saveKey); } catch (e) { /* 무시 */ } location.reload(); } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

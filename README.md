@@ -11,6 +11,8 @@
 |---|---|
 | `js/data/events.js` | 공통 이벤트 85개. 문장을 고치려면 여기만 |
 | `js/data/dept-events.js` | 부서 목록과 부서별 이벤트 (8개 부서 × 5개) |
+| `js/data/dreams.js` | 퇴사하고 하고 싶은 것(꿈) 8개와 꿈별 엔딩 |
+| `js/data/stories.js` | 며칠에 걸쳐 이어지는 연재 이야기 8편 |
 | `js/data/report.js` | 내 회사생활 리포트·근무 일지 문장 |
 | `js/data/sidejobs.js` | 부업 3종과 레벨업 문구 |
 | `js/data/endings.js` | 엔딩 3개 |
