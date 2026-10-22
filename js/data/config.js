@@ -10,7 +10,8 @@ T.CONFIG = {
 
   // 시작할 때 "그냥 입사하기"를 누르면 쓰는 기본 정보 (나중에 리포트에서 고칠 수 있다)
   // rank: null이면 연차로 자동, 0~4면 사원~부장을 직접 고른 것
-  defaultProfile: { company: '주식회사 오늘도', dept: 'plan', deptName: '', years: 1, rank: null, salary: null, expense: null },
+  // dream: 퇴사하고 하고 싶은 것 (dreams.js). custom이면 dreamName·dreamCost(만 원)를 쓴다
+  defaultProfile: { company: '주식회사 오늘도', dept: 'plan', deptName: '', years: 1, rank: null, salary: null, expense: null, dream: 'rest', dreamName: '', dreamCost: null },
   // 연차 → 시작 직급: 2년 차까지 사원, 5년 차까지 대리, 9년 차까지 과장, 14년 차까지 차장, 그 위는 부장
   rankByYears: [2, 5, 9, 14],
 
@@ -58,6 +59,9 @@ T.CONFIG = {
     100: { text: '100일 개근. 이쯤 되면 회사가 나를 다닌다.', fx: { cash: 3000000, eval: 20, hp: 30, mental: 30 } },
   },
   streakBreak: '어제 결근했다. 도장판이 처음부터다.',
+
+  // 연재 이야기 (stories.js): 한 이야기가 끝나면 이만큼 쉬었다가 다음 이야기가 시작된다
+  storyGap: 1,
 
 
   // 골프처럼 마음대로 안 되게
