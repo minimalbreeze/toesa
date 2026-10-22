@@ -9,11 +9,13 @@
 //   'custom'   → 직접 적은 금액
 // side: 부업 조건 { ids: 이 중 하나가, lvl: 이 레벨 이상 }
 // scene: 엔딩 그림 (beach / shop / farm / home)
+// pace: 기본 설정으로 매일 했을 때 엔딩까지 대략 걸리는 기간 (시뮬레이션 결과, 운에 따라 흔들린다)
+// 게임에서는 cash에 config.js의 dreamScale(1/5)이 곱해진다. desc에는 실제 기준 금액을 적는다.
 
 T.DREAMS = [
   {
     id: 'rest', name: '1년 쉬기', short: '1년 쉬기',
-    desc: '아무것도 안 하고 1년. 내 생활비 12개월치가 필요하다.',
+    desc: '아무것도 안 하고 1년. 실제로는 내 생활비 12개월치가 필요하다.', pace: '★ 3~4주',
     cash: 'living12', scene: 'home',
     ending: {
       title: '안식년 엔딩',
@@ -28,7 +30,7 @@ T.DREAMS = [
   },
   {
     id: 'travel', name: '세계 일주', short: '세계 일주',
-    desc: '배낭 하나로 1년. 여행 경비 3천만 원 (게임용 대략치).',
+    desc: '배낭 하나로 1년. 실제로는 여행 경비 3천만 원쯤 (대략치).', pace: '★ 4~5주',
     cash: 30000000, scene: 'beach',
     ending: {
       title: '세계 일주 엔딩',
@@ -43,7 +45,7 @@ T.DREAMS = [
   },
   {
     id: 'cafe', name: '내 카페 차리기', short: '내 카페',
-    desc: '보증금, 인테리어, 커피 머신. 창업비 8천만 원 (게임용 대략치).',
+    desc: '보증금, 인테리어, 커피 머신. 실제로는 창업비 8천만 원쯤 (대략치).', pace: '★★★ 8주쯤',
     cash: 80000000, scene: 'shop',
     ending: {
       title: '카페 사장 엔딩',
@@ -58,7 +60,7 @@ T.DREAMS = [
   },
   {
     id: 'farm', name: '귀농', short: '귀농',
-    desc: '땅과 작은 집, 첫 해 농사비. 5천만 원 (게임용 대략치).',
+    desc: '땅과 작은 집, 첫 해 농사비. 실제로는 5천만 원쯤 (대략치).', pace: '★★ 5~7주',
     cash: 50000000, scene: 'farm',
     ending: {
       title: '귀농 엔딩',
@@ -73,8 +75,8 @@ T.DREAMS = [
   },
   {
     id: 'creator', name: '작가·크리에이터', short: '작가',
-    desc: '블로그 Lv.6 + 내 생활비 6개월치.',
-    cash: 'living6', side: { ids: ['blog'], lvl: 6 }, scene: 'home',
+    desc: '블로그 Lv.4 + 실제로는 내 생활비 12개월치.', pace: '★ 4주쯤',
+    cash: 'living12', side: { ids: ['blog'], lvl: 4 }, scene: 'home',
     ending: {
       title: '전업 작가 엔딩',
       line: '이제 회사 얘기는 글로 쓴다.',
@@ -88,8 +90,8 @@ T.DREAMS = [
   },
   {
     id: 'startup', name: '내 사업', short: '내 사업',
-    desc: '앱이나 쇼핑몰 Lv.8 + 내 생활비 6개월치.',
-    cash: 'living6', side: { ids: ['app', 'shop'], lvl: 8 }, scene: 'shop',
+    desc: '앱이나 쇼핑몰 Lv.4 + 실제로는 내 생활비 12개월치.', pace: '★ 4주쯤',
+    cash: 'living12', side: { ids: ['app', 'shop'], lvl: 4 }, scene: 'shop',
     ending: {
       title: '사업가 엔딩',
       line: '부업이 본업이 됐다.',
@@ -103,7 +105,7 @@ T.DREAMS = [
   },
   {
     id: 'freedom', name: '경제적 자유', short: '경제적 자유',
-    desc: '월급 없이도 살 수 있는 돈. 입력한 월급 크기에 맞춰진다.',
+    desc: '월급 없이도 살 수 있는 돈. 입력한 월급 크기에 맞춰진다.', pace: '★★★ 9~11주',
     cash: 'goal', scene: 'beach',
     ending: {
       title: '경제적 자유 엔딩',
@@ -118,7 +120,7 @@ T.DREAMS = [
   },
   {
     id: 'custom', name: '직접 적기', short: '내 꿈',
-    desc: '하고 싶은 걸 적고, 필요한 돈을 직접 정한다.',
+    desc: '하고 싶은 걸 적고, 실제로 필요한 돈을 직접 정한다.', 
     cash: 'custom', scene: 'beach',
     ending: {
       title: '{꿈} 엔딩',
@@ -132,3 +134,10 @@ T.DREAMS = [
     },
   },
 ];
+
+// 꿈을 고를 때·리포트에 붙는 설명
+T.DREAM_NOTE = {
+  pace: (d) => d.id === 'custom' ? '엔딩까지 걸리는 기간은 적은 금액에 따라 다르다.' : `엔딩까지 ${d.pace} (기본 설정으로 매일 할 때, 대략)`,
+  scale: '한 번 입사가 한 시즌이야. 한 시즌에 끝나게, 게임에서는 필요한 돈을 실제의 1/5로 줄였어.',
+  season: (days, left) => `출근 ${days}일 만에 퇴사. ${left ? `아직 못 본 꿈 엔딩이 ${left}개 남았다. 다음 시즌엔 다른 꿈으로 입사해 보자.` : '꿈 엔딩을 전부 봤다. 이제 진짜 회사생활 차례다.'}`,
+};
