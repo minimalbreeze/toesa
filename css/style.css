@@ -185,7 +185,8 @@ html.standalone #app {
 .teaser p { margin: 0; font-size: 14px; line-height: 1.6; }
 .plan { background: var(--paper-hi); border: 2px solid var(--ink); padding: 8px 10px; }
 .plan b { font-size: 16px; }
-.plan p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.plan p { margin: 2px 0 0; font-size: 13px; color: var(--muted); white-space: pre-line; }
+#p-dream-desc { white-space: pre-line; }
 .form-custom { display: grid; gap: 6px; }
 
 /* 출근 도장판 */

@@ -103,7 +103,7 @@
     const c = d.cash;
     const cash = c === 'living12' ? living() * 12 : c === 'living6' ? living() * 6 : c === 'goal' ? goal()
       : c === 'custom' ? (p.dreamCost || 3000) * 10000 : c;
-    return { cash: Math.round(cash / 10000) * 10000, side: d.side || null };
+    return { cash: Math.round(cash * C.dreamScale / 10000) * 10000, side: d.side || null };
   }
   function sideBest(ids) { return Math.max(...ids.map((id) => S.side[id].lvl)); }
   function dreamParts() {
@@ -115,6 +115,7 @@
     }
     return parts;
   }
+  const dreamDesc = (d) => d.desc + '\n' + T.DREAM_NOTE.pace(d);
   const dreamReady = () => dreamParts().every((x) => x.pct >= 1);
   // 여러 조건이 있으면 평균으로 진행률을 보여 준다
   const goalPct = () => { const ps = dreamParts(); return ps.reduce((a, x) => a + x.pct, 0) / ps.length; };
@@ -317,13 +318,18 @@
     if (S.story || S.dayNo < S.storyRest) return;
     const pool = T.STORIES.filter((st) => !S.storiesDone.includes(st.id) && (!st.when || st.when(S)));
     if (!pool.length) return;
-    S.story = { id: rnd(pool).id, step: 0, due: S.dayNo + 1 };
+    // 지난 시즌에 본 이야기는 뒤로 미룬다 (기록은 기기에 남는다)
+    const seen = M.storiesSeen || [];
+    const fresh = pool.filter((st) => !seen.includes(st.id));
+    S.story = { id: rnd(fresh.length ? fresh : pool).id, step: 0, due: S.dayNo + 1 };
   }
   function advanceStory(opt) {
     const st = STORY[S.story.id];
     const nextIdx = opt.end ? st.steps.length : (opt.next != null ? opt.next : S.story.step + 1);
     if (nextIdx >= st.steps.length) {
       S.storiesDone.push(st.id);
+      M.storiesSeen = M.storiesSeen || [];
+      if (!M.storiesSeen.includes(st.id)) { M.storiesSeen.push(st.id); saveMeta(); }
       S.story = null;
       S.storyRest = S.dayNo + 1 + C.storyGap;
       return { done: true, title: st.title };
@@ -768,14 +774,15 @@
         <p class="line">${esc(v.reason === 'burnout' ? e.burnoutLine : v.reason === 'fired' ? e.firedLine : e.line)}</p>
         ${e.body.map((b) => `<p class="text">${esc(fmt(b))}</p>`).join('')}
         <div class="summary">
-          <span>${esc(company())}</span><span>입사 ${S.month}개월</span><span>${C.ranks[S.rank].name}</span><span>${won(S.cash)}</span><span>${JOB[best].name} Lv.${S.side[best].lvl}</span>
+          <span>${esc(company())}</span><span>출근 ${S.dayNo + 1}일</span><span>입사 ${S.month}개월</span><span>${C.ranks[S.rank].name}</span><span>${won(S.cash)}</span><span>${JOB[best].name} Lv.${S.side[best].lvl}</span>
         </div>
         <div class="dex"><b>엔딩 도감 ${dex.filter((x) => got[x.key]).length}/${dex.length}</b>
           ${dex.map((x) => `<span class="${got[x.key] ? 'got' : ''}">${got[x.key] ? x.label : '???'}</span>`).join('')}
         </div>
+        <p class="muted">${esc(T.DREAM_NOTE.season(S.dayNo + 1, T.DREAMS.filter((d) => !got['dream:' + d.id]).length))}</p>
         <div class="row">
           <button class="btn" data-act="share">결과 공유하기</button>
-          <button class="btn primary" data-act="restart">다시 입사하기</button>
+          <button class="btn primary" data-act="restart">다음 시즌 입사</button>
         </div>
         <button class="btn" data-act="report">이번 회사생활 리포트 보기</button>`;
     }
@@ -835,7 +842,8 @@
         <div class="form-unit"><input id="p-expense" type="number" inputmode="numeric" min="0" max="5000" value="${p.expense || ''}" placeholder="월세·식비·통신비 등"><small>만 원</small></div>
         <label for="p-dream">퇴사하고 하고 싶은 것</label>
         <select id="p-dream">${T.DREAMS.map((d) => `<option value="${d.id}"${d.id === p.dream ? ' selected' : ''}>${d.name}</option>`).join('')}</select>
-        <p class="muted" id="p-dream-desc">${esc((DREAM[p.dream] || DREAM.rest).desc)}</p>
+        <p class="muted" id="p-dream-desc">${esc(dreamDesc(DREAM[p.dream] || DREAM.rest))}</p>
+        <p class="muted">${T.DREAM_NOTE.scale}</p>
         <div class="form-custom"${p.dream === 'custom' ? '' : ' hidden'}>
           <input id="p-dreamname" type="text" maxlength="16" value="${esc(p.dreamName || '')}" placeholder="예: 동네 책방 열기">
           <div class="form-unit"><input id="p-dreamcost" type="number" inputmode="numeric" min="100" max="100000" value="${p.dreamCost || ''}" placeholder="필요한 돈"><small>만 원</small></div>
@@ -921,9 +929,10 @@
       const months = r.save > 0 ? Math.ceil(realNeed / r.save) : null;
       realLine = `<p class="muted">현실에서는: ${esc(dreamName())}에 약 ${man(realNeed * 10000)}이 필요하다. 한 달에 ${man(r.save * 10000)}씩 모으면 ${months ? `약 ${months}개월(${(months / 12).toFixed(1)}년)` : '모을 수 없다'}. 투자 수익과 지금까지 모은 돈은 빼고 단순 계산했어.</p>`;
     }
-    const desc = dream().id === 'custom' ? `직접 정한 꿈. 필요한 돈 ${man(dreamNeed().cash)}.` : dream().desc;
+    const desc = dream().id === 'custom' ? `직접 정한 꿈. 실제로 필요한 돈 ${man((p.dreamCost || 3000) * 10000)}.` : dreamDesc(dream());
     return `<div class="plan"><b>${esc(dreamName())}</b><p>${esc(desc)}</p></div>
       <ul class="checks">${rows}</ul>
+      <p class="muted">${T.DREAM_NOTE.scale}</p>
       <p class="muted">${game}</p>${realLine}`;
   }
 
@@ -1099,7 +1108,7 @@
     document.addEventListener('change', (e) => {
       if (e.target.id === 'p-dept') $('#p-deptname').hidden = e.target.value !== 'etc';
       if (e.target.id === 'p-dream') {
-        $('#p-dream-desc').textContent = (DREAM[e.target.value] || DREAM.rest).desc;
+        $('#p-dream-desc').textContent = dreamDesc(DREAM[e.target.value] || DREAM.rest);
         $('.form-custom').hidden = e.target.value !== 'custom';
       }
     });
@@ -1123,7 +1132,7 @@
   }
 
   // 테스트용 (콘솔에서 TT.state() 등)
-  window.TT = { state: () => S, meta: () => M, events: EV, render: () => render(), reset: () => { try { localStorage.removeItem(C.saveKey); } catch (e) { /* 무시 */ } location.reload(); } };
+  window.TT = { state: () => S, meta: () => M, events: EV, render: () => render(), pct: () => goalPct(), ready: () => dreamReady(), reset: () => { try { localStorage.removeItem(C.saveKey); } catch (e) { /* 무시 */ } location.reload(); } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
