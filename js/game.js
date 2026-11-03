@@ -614,7 +614,7 @@
     if (v.scene) return v.scene;
     const phase = T.PHASES[S.phase] ? T.PHASES[S.phase].id : 'am';
     switch (v.type) {
-      case 'title': return { scene: 'office', phase: 'off', who: 'boss' };
+      case 'title': return { scene: 'office', phase: 'off', who: 'boss', prop: 'cover', face: 'happy' };
       case 'event': return sceneOfEvent(EV[v.id]);
       case 'evening': return { scene: 'home' };
       case 'pickjob': return { scene: 'home', mode: 'side' };
@@ -653,6 +653,7 @@
       ? `<b>부업 시급 ${won(h)}</b><span>${focus.name} Lv.${S.side[S.focus].lvl} · 앱을 꺼도 쌓여</span>`
       : `<b>부업 시급 0원</b><span>퇴근 후에 부업을 시작해 봐</span>`;
     $('#btn-resign').disabled = ['ending', 'title', 'setup'].includes(v);
+    $('#cover').hidden = v !== 'title';
     $('#btn-report').disabled = ['title', 'setup'].includes(v);
     $('#btn-sound').textContent = M.sound === false ? '소리 끔' : '소리 켬';
     $('#btn-sound').setAttribute('aria-pressed', M.sound === false ? 'false' : 'true');
@@ -673,7 +674,6 @@
     let html = '';
     if (v.type === 'title') {
       html = `
-        <h1 class="logo">퇴사하고 싶다<small>: 오늘도 버텼다</small></h1>
         <p>평범한 직장인. 퇴사하고 하고 싶은 게 하나 있다.</p>
         <p class="muted">그 꿈을 위해 회사를 버틸지, 벗어날지. 매일의 선택이 결말을 바꾼다. 다만 회사는 마음대로 되는 게 하나도 없다.</p>
         <button class="btn primary" data-act="setup">내 회사로 입사하기</button>
@@ -994,7 +994,7 @@
     const { r } = reportData();
     const per = T.REPORT.personas[r.persona];
     const top = Object.entries(T.TRAITS).sort((a, b) => r.share[b[0]] - r.share[a[0]]).slice(0, 3).map(([k, tr]) => `${tr.name} ${Math.round(r.share[k] * 100)}%`).join(' · ');
-    const text = `내 회사생활 진단: 「${per.title}」\n${top}\n#퇴사하고싶다 #오늘도버텼다`;
+    const text = `내 회사생활 진단: 「${per.title}」\n${top}\n#퇴사할게요 #오늘도버텼다`;
     try { await navigator.clipboard.writeText(text + '\n' + C.shareUrl); toast('리포트 요약을 복사했어.'); } catch (e) { toast('복사가 안 돼. 화면을 캡처해서 공유해 줘.'); }
   }
 
@@ -1023,8 +1023,8 @@
   async function share() {
     const e = endingOf(S.view);
     const url = /^https?:/.test(location.href) && !/claude|localhost|127\./.test(location.host) ? location.href.split('#')[0] : C.shareUrl;
-    const text = `나는 ${company()} 입사 ${S.month}개월 만에 「${e.title}」으로 퇴사했다.\n#퇴사하고싶다 #오늘도버텼다`;
-    try { if (navigator.share) { await navigator.share({ title: '퇴사하고 싶다', text, url }); return; } } catch (err) { if (err && err.name === 'AbortError') return; }
+    const text = `나는 ${company()} 입사 ${S.month}개월 만에 「${e.title}」으로 퇴사했다.\n#퇴사할게요 #오늘도버텼다`;
+    try { if (navigator.share) { await navigator.share({ title: '퇴사할게요', text, url }); return; } } catch (err) { if (err && err.name === 'AbortError') return; }
     try { await navigator.clipboard.writeText(text + '\n' + url); toast('결과를 복사했어. 붙여 넣기만 하면 돼.'); return; } catch (err) { /* 아래로 */ }
     sheet(`<h3>결과 공유하기</h3><p class="muted">아래 글을 길게 눌러 복사해 줘.</p><textarea id="share-text" readonly>${esc(text + '\n' + url)}</textarea><button class="btn primary" data-act="close">닫기</button>`);
   }
