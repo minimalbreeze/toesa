@@ -1,6 +1,6 @@
 {
   "appId": "com.minimalbreeze.toesa",
-  "appName": "퇴사하고 싶다",
+  "appName": "퇴사할게요",
   "webDir": "www",
   "ios": {
     "contentInset": "always",

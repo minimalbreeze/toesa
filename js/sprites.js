@@ -227,8 +227,9 @@
     if (!o.hidePlayer) person(ctx, 'player', 12, sleepy ? 44 : 38, f, { face: myFace });
     if (o.prop === 'sleepy') zzz(ctx, 26, 34, f, PAL.k);
 
-    // 모니터 (소품에 따라 화면이 바뀐다)
-    monitor(ctx, 29, 39, o.mode === 'side' ? 'side' : o.prop, f);
+    // 모니터 (소품에 따라 화면이 바뀐다). 첫 화면은 바다가 나오는 옛날 모니터
+    if (o.prop === 'cover') crt(ctx, 28, 36, f);
+    else monitor(ctx, 29, 39, o.mode === 'side' ? 'side' : o.prop, f);
 
     // 책상
     rect(ctx, 3, 56, 72, 3, PAL.k);
@@ -239,12 +240,16 @@
     rect(ctx, 4, 70, 70, 1, PAL.k);
     rect(ctx, 34, 63, 10, 1, '#6f4a2c');
 
+    // 첫 화면은 머그컵 자리에 선풍기
+    if (o.prop === 'cover') deskFan(ctx, 59, 40, f);
     // 머그컵 + 김
+    else {
     rect(ctx, 58, 51, 6, 5, PAL.k);
     rect(ctx, 59, 52, 4, 4, '#fbfaf5');
     rect(ctx, 64, 52, 1, 2, PAL.k);
     if (f % 4 < 2) { rect(ctx, 60, 48, 1, 2, '#ffffff'); rect(ctx, 61, 46, 1, 2, '#ffffff'); }
     else { rect(ctx, 61, 48, 1, 2, '#ffffff'); rect(ctx, 60, 46, 1, 2, '#ffffff'); }
+    }
 
     if (o.prop === 'cake') {
       rect(ctx, 44, 49, 12, 7, PAL.k); rect(ctx, 45, 50, 10, 5, '#fbfaf5'); rect(ctx, 45, 52, 10, 1, '#ffb3c1');
@@ -383,6 +388,34 @@
   function zzz(ctx, x, y, f, c) {
     const zx = x + (f % 6), zy = y - (f % 6);
     rect(ctx, zx, zy, 3, 1, c); rect(ctx, zx + 1, zy + 1, 1, 1, c); rect(ctx, zx, zy + 2, 3, 1, c);
+  }
+
+  // 배불뚝이 모니터: 화면에는 바다 (퇴근하고 가고 싶은 곳)
+  function crt(ctx, x, y, f) {
+    rect(ctx, x + 3, y + 3, 24, 17, PAL.k);
+    rect(ctx, x + 4, y + 4, 22, 15, '#cfc6b0');
+    rect(ctx, x, y, 26, 19, PAL.k);
+    rect(ctx, x + 1, y + 1, 24, 17, '#ece4d0');
+    rect(ctx, x + 3, y + 2, 20, 13, PAL.k);
+    rect(ctx, x + 4, y + 3, 18, 6, '#8fd3f5');
+    rect(ctx, x + 4, y + 9, 18, 5, '#3a9ad9');
+    rect(ctx, x + 17, y + 4, 3, 3, '#ffe27a');
+    for (let i = 0; i < 3; i++) rect(ctx, x + 5 + ((i * 6 + f) % 15), y + 10 + (i % 2) * 2, 3, 1, '#d6f0ff');
+    rect(ctx, x + 19, y + 16, 2, 1, '#7fd67f');
+    rect(ctx, x + 9, y + 19, 8, 1, PAL.k);
+  }
+
+  // 책상 선풍기 (날개가 돈다)
+  function deskFan(ctx, x, y, f) {
+    rect(ctx, x, y, 13, 13, PAL.k);
+    rect(ctx, x + 1, y + 1, 11, 11, '#fbf3d6');
+    const blade = '#ffd36b';
+    if (f % 2) { rect(ctx, x + 2, y + 5, 9, 3, blade); rect(ctx, x + 5, y + 2, 3, 9, blade); }
+    else { for (let i = 0; i < 7; i++) { rect(ctx, x + 3 + i, y + 3 + i, 1, 1, blade); rect(ctx, x + 9 - i, y + 3 + i, 1, 1, blade); } }
+    rect(ctx, x + 5, y + 5, 3, 3, PAL.k);
+    rect(ctx, x + 6, y + 13, 1, 1, PAL.k);
+    rect(ctx, x + 2, y + 14, 9, 1, PAL.k);
+    rect(ctx, x + 3, y + 15, 7, 1, '#fbf3d6');
   }
 
   function monitor(ctx, x, y, kind, f) {

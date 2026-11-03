@@ -1,4 +1,4 @@
-# 아이폰 앱 출시 안내 (윈도우 + 파워셸) — 퇴사하고 싶다
+# 아이폰 앱 출시 안내 (윈도우 + 파워셸) — 퇴사할게요
 
 맥 없이 출시한다. 빌드는 GitHub Actions의 맥에서 하고, App Store Connect(TestFlight)로 바로 올라간다.
 윈도우에서는 파워셸 명령 몇 줄만 친다.
@@ -20,7 +20,7 @@ Certificates, Identifiers & Profiles → Identifiers → **+** → App IDs → A
 ## 2. 앱 만들기 (appstoreconnect.apple.com)
 앱 → **+** → 새로운 앱
 - 플랫폼: iOS
-- 이름: `퇴사하고 싶다` (이미 있는 이름이면 `퇴사하고 싶다 : 오늘도 버텼다`로)
+- 이름: `퇴사할게요` (이미 있는 이름이면 `퇴사할게요 : 오늘도 버텼다`로)
 - 기본 언어: 한국어
 - 번들 ID: `com.minimalbreeze.toesa`
 - SKU: `toesa-001`

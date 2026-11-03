@@ -15,6 +15,7 @@
   --hp: #ef7d57;
   --mind: #5b7cfa;
   --gold: #f2b84b;
+  --pink: #ff5fa8;
   --on-night: #efeaf7;
   --on-night-muted: #b9b2c9;
   --font: 'Galmuri11', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
@@ -90,6 +91,29 @@ html.standalone #app {
 /* ── 픽셀 사무실 ── */
 #stage { position: relative; border: 3px solid var(--ink); box-shadow: var(--shadow); background: #ddd6c4; }
 #scene { display: block; width: 100%; height: auto; aspect-ratio: 120 / 84; image-rendering: pixelated; image-rendering: crisp-edges; }
+/* 첫 화면: 사무실 위에 핑크 손글씨 제목 (핑크는 이 제목에만 쓴다) */
+#cover { position: absolute; inset: 0; pointer-events: none; }
+#cover[hidden] { display: none; }
+#cover .pill {
+  position: absolute; top: 8px; right: 8px; background: var(--gold); color: var(--ink);
+  font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--ink);
+}
+#cover .hand {
+  position: absolute; left: 4%; bottom: 13%; margin: 0;
+  font-size: clamp(40px, 14vw, 64px); font-weight: 700; line-height: 1; letter-spacing: -2px;
+  color: var(--pink); transform: rotate(-6deg);
+  text-shadow: -3px 0 #fff, 3px 0 #fff, 0 -3px #fff, 0 3px #fff, -2px -2px #fff, 2px 2px #fff, -2px 2px #fff, 2px -2px #fff, 5px 5px 0 var(--ink);
+}
+#cover .hand i { display: inline-block; font-style: normal; }
+#cover .hand i:nth-child(1) { transform: rotate(-4deg) translateY(2px); }
+#cover .hand i:nth-child(2) { transform: rotate(3deg) translateY(-3px); }
+#cover .hand i:nth-child(3) { transform: rotate(-2deg) translateY(1px) scale(1.06); }
+#cover .hand i:nth-child(4) { transform: rotate(5deg) translateY(-2px); }
+#cover .hand i:nth-child(5) { transform: rotate(-3deg) translateY(4px) scale(1.1); }
+#cover small {
+  position: absolute; left: 6%; bottom: 3%; font-size: 14px; font-weight: 700;
+  color: var(--paper-hi); background: var(--ink); padding: 1px 8px;
+}
 #toast {
   position: absolute; left: 8px; right: 8px; bottom: 8px;
   background: var(--ink); color: var(--paper-hi); padding: 6px 10px; font-size: 13px; text-align: center;
