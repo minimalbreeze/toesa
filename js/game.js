@@ -28,19 +28,40 @@
   function save() { if (!S) return; S.lastSeen = Date.now(); store(C.saveKey, S); }
   function saveMeta() { store(C.metaKey, M); }
 
-  function newGame() {
-    M.runs = (M.runs || 0) + 1;
-    const p = profile();
-    // 연차로 시작 직급을, 입력한 월급으로 월급 눈금 전체를 맞춘다
+  // 시작점: 입력한 정보로 월급·주거비·그 밖의 고정지출·출퇴근을 정한다 (입사 서류의 난이도 미리보기도 이걸 쓴다)
+  function startPlan(p, raw) {
     const rank = p.rank != null ? p.rank : rankOfYears(p.years);
     const scale = p.salary ? (p.salary * 10000) / C.ranks[rank].salary : 1;
     const rankPay = C.ranks[rank].salary * scale;
     const ratio = rankPay / C.ranks[0].salary;
+    const H = T.LIFE.housing.find((h) => h.id === p.housing) || T.LIFE.housing[1];
+    const CM = T.LIFE.commutes.find((c) => c.id === p.commute) || T.LIFE.commutes[0];
+    // 예전 입력(주거 칸이 없던 때)의 고정지출에는 월세가 이미 들어 있다
+    const old = raw && raw.housing === undefined && raw.expense != null;
+    const rent = old ? 0 : p.housingCost != null ? p.housingCost * 10000 : Math.round(H.cost * ratio / 10000) * 10000;
+    const other = p.expense != null ? p.expense * 10000 : Math.round(C.life.fixed * ratio / 10000) * 10000;
+    const car = CM.car ? T.LIFE.cars.find((c) => c.id === CM.car) : null;
+    const day = (car ? car.commute : CM.cost) + C.life.lunch;
+    const out = other + rent + (car ? car.monthly : 0) + day * C.daysPerMonth + C.life.weekendAvg;
+    const pay = Math.round(rankPay / 1000) * 1000;
+    const left = pay - out;
+    const lv = C.life.difficulty.findIndex((t) => left / pay >= t);
+    return { rank, scale, ratio, H, CM, car, rent, other, out, pay, left, diff: T.LIFE.difficulty[lv < 0 ? T.LIFE.difficulty.length - 1 : lv] };
+  }
+
+  function newGame() {
+    M.runs = (M.runs || 0) + 1;
+    const p = profile();
+    // 연차로 시작 직급을, 입력한 월급으로 월급 눈금 전체를 맞춘다
+    const sp = startPlan(p, M.profile);
+    const { rank, scale, ratio } = sp;
     S = {
       v: 1, month: 1, day: 0, phase: 4,
       hp: C.start.hp, mental: C.start.mental, cash: Math.round(C.start.cash * ratio), eval: C.start.eval,
       rank, salaryBonus: 0, livingDelta: 0,
-      scale, livingBase: p.expense ? p.expense * 10000 : Math.round(C.living * ratio),
+      scale, livingBase: sp.other,
+      lifeV: 1, car: sp.car ? sp.car.id : null, tax: newTax(), monthSpend: { commute: 0, weekend: 0 },
+      housing: sp.H.id, rent: sp.rent, deposit: sp.H.deposit || 0, commuteMode: sp.CM.id,
       goal: Math.max(5e7, Math.round(C.freedomGoal * ratio / 1e7) * 1e7),
       ratio, inv: newInv(),
       traits: {}, dayLog: [],
@@ -64,6 +85,9 @@
     return { units: zero(), cost: zero(), price: Object.fromEntries(ids.map((id) => [id, 1000])), move: zero(), news: '', rate: C.invest.estate.rate, estates: [], road: [], bought: false };
   }
 
+  // 세금: 1년(게임 12개월) 동안 쌓인 부업·월세 소득과 미리 뗀 세금
+  function newTax() { return { side: 0, rent: 0, withheld: 0 }; }
+
   // 1차 버전 저장을 이어서 쓸 수 있게 새로 생긴 칸을 채운다
   function migrate(s) {
     if (!s.bags) s.bags = {};
@@ -73,6 +97,12 @@
     if (!s.dayLog) s.dayLog = [];
     if (s.dayNo == null) { s.dayNo = (s.month - 1) * C.daysPerMonth + s.day; s.story = null; s.storiesDone = []; s.storyRest = 0; }
     if (!s.inv) { s.inv = newInv(); s.ratio = s.ratio || 1; }
+    // 생활비를 고정지출 + 출근·주말 지출로 나눴다. 예전 생활비에서 새로 따로 나가는 몫을 뺀다.
+    if (!s.lifeV) {
+      s.lifeV = 1; s.car = null; s.tax = newTax(); s.monthSpend = { commute: 0, weekend: 0 };
+      s.housing = 'monthly'; s.rent = 0; s.deposit = 0; s.commuteMode = 'transit';
+      s.livingBase = Math.max(300000, s.livingBase - (T.LIFE.commutes[0].cost + C.life.lunch) * C.daysPerMonth - C.life.weekendAvg);
+    }
     return s;
   }
 
@@ -80,7 +110,16 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const salary = () => Math.round(C.ranks[S.rank].salary * S.scale / 1000) * 1000 + S.salaryBonus;
-  const living = () => Math.max(300000, S.livingBase + S.livingDelta);
+  // 생활비 = 월급날 고정지출 + 출근한 날 교통비·점심값 + 주말 지출(평균). 목표 계산에는 이 합계를 쓴다.
+  const carOf = () => (S.car ? T.LIFE.cars.find((c) => c.id === S.car) : null);
+  const housingOf = () => T.LIFE.housing.find((h) => h.id === S.housing) || T.LIFE.housing[1];
+  const commuteOf = () => T.LIFE.commutes.find((c) => c.id === S.commuteMode && !c.car) || T.LIFE.commutes[0];
+  const otherFixed = () => Math.max(100000, S.livingBase + S.livingDelta);
+  const fixedBase = () => otherFixed() + (S.rent || 0);
+  const fixedCost = () => fixedBase() + (carOf() ? carOf().monthly : 0);
+  const dayCost = () => (carOf() ? carOf().commute : commuteOf().cost) + C.life.lunch;
+  const variableMonthly = () => dayCost() * C.daysPerMonth + C.life.weekendAvg;
+  const living = () => fixedCost() + variableMonthly();
   const goal = () => S.goal;
   const profile = () => Object.assign({}, C.defaultProfile, M.profile || {});
   const rankOfYears = (y) => C.rankByYears.filter((t) => (y || 1) > t).length;
@@ -101,19 +140,45 @@
   }
   const hourlyTotal = () => T.SIDEJOBS.reduce((a, j) => a + hourly(j.id), 0);
   const maxLvl = () => Math.max(...T.SIDEJOBS.map((j) => S.side[j.id].lvl));
+  // ───────── 세금 ─────────
+  const TX = C.tax;
+  function progTax(x) {
+    let t = 0, prev = 0;
+    for (const [cap, r] of TX.brackets) { if (x > prev) t += (Math.min(x, cap) - prev) * r; prev = cap; }
+    return t;
+  }
+  // 월급 1년치 위에 부업·월세 소득을 얹었을 때 늘어나는 세금 (지방소득세 포함)
+  function incomeTaxDue() {
+    const base = salary() * 12, add = S.tax.side + S.tax.rent;
+    return Math.round((progTax(base + add) - progTax(base)) * (1 + TX.local));
+  }
+  // 게임 속 12개월마다 월급날에 정산: 종합소득세(미리 뗀 3.3%는 빼 준다) + 재산세
+  function taxYear() {
+    if (S.month % TX.yearMonths !== 0) return null;
+    const due = incomeTaxDue();
+    const income = due - Math.round(S.tax.withheld);
+    const prop = Math.round(S.inv.estates.reduce((a, e) => a + e.price * TX.property, 0) / 1000) * 1000;
+    const out = { gross: Math.round(S.tax.side + S.tax.rent), due, withheld: Math.round(S.tax.withheld), income, prop };
+    S.cash -= income + prop;
+    S.tax = newTax();
+    return out;
+  }
+
   // ───────── 재테크 ─────────
   const IV = C.invest;
   const STOCK = Object.fromEntries(T.INVEST.stocks.map((x) => [x.id, x]));
   const stockVal = (id) => S.inv.units[id] * S.inv.price[id];
   const stocksTotal = () => T.INVEST.stocks.reduce((a, x) => a + stockVal(x.id), 0);
   const estateEquity = () => S.inv.estates.reduce((a, e) => a + e.price - e.loan, 0);
+  // 전세 보증금은 이사 나갈 때나 돌려받는 돈이라 순자산(꿈 자금)에 안 센다
   const netWorth = () => S.cash + stocksTotal() + estateEquity();
   const emergencyNeed = () => Math.round(living() * C.emergencyMonths / 10000) * 10000;
   const estateNet = (e) => Math.round(e.rent - e.loan * S.inv.rate / 100 / 12);
   const rentNet = () => S.inv.estates.reduce((a, e) => a + estateNet(e), 0);
   const sideMonthly = () => hourlyTotal() * C.dayIncomeHours * C.daysPerMonth;
-  const divMonthly = () => T.INVEST.stocks.reduce((a, x) => a + stockVal(x.id) * (IV.stocks[x.id].div || 0), 0);
-  const passive = () => Math.round(sideMonthly() + rentNet() + divMonthly());
+  const divMonthly = () => T.INVEST.stocks.reduce((a, x) => a + stockVal(x.id) * (IV.stocks[x.id].div || 0), 0) * (1 - TX.dividend);
+  const capitalIncome = () => Math.round(rentNet() + divMonthly());
+  const passive = () => Math.round(sideMonthly() * (1 - TX.withhold) + rentNet() + divMonthly());
   const road = (id) => S.inv.road.includes(id);
   const stocksOpen = () => road('emergency');
   const estateOpen = () => road('seed');
@@ -122,7 +187,7 @@
     const E = IV.estate;
     const price = Math.round(E.price * (S.ratio || 1) / 1e6) * 1e6;
     const loan = Math.round(price * E.ltv);
-    return { price, loan, need: price - loan + Math.round(price * E.tax), rent: Math.round(E.rent * (S.ratio || 1) / 10000) * 10000 };
+    return { price, loan, need: price - loan + Math.round(price * (TX.acquire + TX.broker)), rent: Math.round(E.rent * (S.ratio || 1) / 10000) * 10000 };
   }
   function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
   function pickW(list) { const sum = list.reduce((a, x) => a + (x.w || 1), 0); let r = Math.random() * sum; for (const x of list) { if ((r -= (x.w || 1)) <= 0) return x; } return list[list.length - 1]; }
@@ -144,11 +209,18 @@
     const sold = [];
     inv.estates = inv.estates.filter((e) => {
       if (e.selling == null || S.dayNo + 1 < e.selling) return true;
-      const got = Math.round(e.price * (1 - IV.estate.sellFee) - e.loan);
+      const got = Math.round(e.price * (1 - TX.broker) - e.loan - gainTax(e));
       S.cash += got; sold.push(got);
       return false;
     });
     if (sold.length) inv.news = (inv.news ? inv.news + ' ' : '') + `${T.INVEST.lines.sold} 손에 쥔 돈 ${man(sold.reduce((a, b) => a + b, 0))}.`;
+  }
+
+  // 원룸 양도세 (게임용 단순화): 산 값보다 비싸게 팔면 차익에 붙는다. 1년 안에 팔면 더 무겁다.
+  function gainTax(e) {
+    const gain = e.price * (1 - TX.broker) - (e.buy || e.price);
+    if (gain <= 0) return 0;
+    return Math.round(gain * (S.month - (e.month || S.month) < TX.yearMonths ? TX.gainShort : TX.gainLong));
   }
 
   // 월급날: 월세가 들어오고 대출 이자가 나간다. 시세도 한 달치 움직인다.
@@ -165,6 +237,7 @@
       if (ev && ev.cash) n += Math.round(ev.cash * (S.ratio || 1) / 1000) * 1000;
       if (ev) notes.push(ev.text);
       net += n;
+      if (!(ev && ev.vacancy)) S.tax.rent += Math.max(0, estateNet(e));
     }
     S.cash += net;
     return { net, notes };
@@ -207,7 +280,7 @@
     if (S.inv.estates.length >= IV.estate.max) return false;
     if (S.cash < q.need) { toast(T.INVEST.lines.noCash + ` 계약금과 세금 ${man(q.need)}이 필요해.`); return false; }
     S.cash -= q.need;
-    S.inv.estates.push({ price: q.price, loan: q.loan, rent: q.rent, paid: q.need, selling: null });
+    S.inv.estates.push({ price: q.price, loan: q.loan, rent: q.rent, paid: q.need, buy: q.price, month: S.month, selling: null });
     return true;
   }
 
@@ -256,7 +329,7 @@
     const c = d.cash;
     const cash = c === 'living12' ? living() * 12 : c === 'living6' ? living() * 6 : c === 'goal' ? goal()
       : c === 'custom' ? (p.dreamCost || 3000) * 10000 : (c || 0);
-    return { cash: Math.round(cash / 10000) * 10000, side: d.side || null, passive: d.passive ? Math.round(living() * d.passive / 10000) * 10000 : 0 };
+    return { cash: Math.round(cash / 10000) * 10000, side: d.side || null, capital: d.capital ? Math.round(fixedCost() * d.capital / 10000) * 10000 : 0 };
   }
   function sideBest(ids) { return Math.max(...ids.map((id) => S.side[id].lvl)); }
   // 사직서 조건: 꿈 자금(순자산) + 현금 비상금 + (꿈에 따라) 부업 레벨·월 부수입
@@ -267,7 +340,7 @@
     if (n.cash) parts.push(part('꿈 자금 (순자산)', netWorth(), n.cash, true));
     parts.push(part(`비상금 (현금 ${C.emergencyMonths}개월치)`, S.cash, emergencyNeed(), true));
     if (n.side) parts.push(part(n.side.ids.map((id) => JOB[id].name).join('·') + ' 레벨', sideBest(n.side.ids), n.side.lvl, false));
-    if (n.passive) parts.push(part('월 부수입 (부업+월세+배당)', passive(), n.passive, true));
+    if (n.capital) parts.push(part('월 자본소득 (월세+배당)', capitalIncome(), n.capital, true));
     return parts;
   }
   const dreamDesc = (d) => d.desc + '\n' + T.DREAM_NOTE.pace(d);
@@ -559,12 +632,15 @@
       if (T.PHASES[S.phase].id === 'evening') S.view = { type: 'evening' };
       else S.view = { type: 'event', id: pickEvent() };
     } else if (after === 'night' || after === 'collapse') {
+      commute();
       marketClose();
       planStory();
       S.view = { type: 'daylog', log: S.dayLog, month: S.month, day: S.day, teaser: teaser(), after: 'endday' };
       S.dayLog = [];
     } else if (after === 'endday') {
       endDay();
+    } else if (after === 'weekend') {
+      payday();
     } else if (after === 'fired') {
       return ending('rehire', 'fired');
     } else if (after === 'payday') {
@@ -584,10 +660,26 @@
     save(); render();
   }
 
+  // 부업 수입은 하루를 보내야 들어온다 (3.3%를 먼저 떼고, 1년에 한 번 종합소득세로 정산)
   function dayIncome() {
-    const v = Math.round(hourlyTotal() * C.dayIncomeHours);
+    const gross = Math.round(hourlyTotal() * C.dayIncomeHours);
+    if (!gross) return 0;
+    const w = Math.round(gross * TX.withhold);
+    S.tax.side += gross; S.tax.withheld += w;
+    const v = gross - w;
     S.cash += v; S.monthSide += v; S.totalSide += v;
     return v;
+  }
+
+  // 출근한 날마다 나가는 돈: 교통비(차가 있으면 기름값·주차비) + 점심값
+  function commute() {
+    const c = carOf();
+    const cost = dayCost();
+    S.cash -= cost; S.monthSpend.commute += cost;
+    const list = [{ k: 'cash', v: -cost }];
+    const hp = c ? c.hp : commuteOf().hp;
+    if (hp) { const b = S.hp; S.hp = clamp(S.hp + hp, 0, 100); list.push({ k: 'hp', v: S.hp - b }); }
+    log(c ? `출근(${c.name}) · 점심값` : `출근(${commuteOf().name}) · 점심값`, list, false);
   }
 
   function evening(kind) {
@@ -604,6 +696,50 @@
     log(kind === 'rest' ? '집에서 뻗었다' : '친구랑 치맥', d.list, sh.twist);
     S.view = { type: 'result', text, picked: kind === 'rest' ? '집에서 뻗는다' : '친구랑 치맥', deltas: d.list, ups: [], twist: sh.twist, after: 'night', scene: { scene: 'home', mode: kind } };
     sfx(sh.twist ? 'twist' : 'good');
+    save(); render();
+  }
+
+  function weekend(id) {
+    const w = T.LIFE.weekend.find((x) => x.id === id);
+    if (!w) return;
+    const sh = shake(w.fx);
+    const d = apply(sh.fx);
+    S.monthSpend.weekend += -(sh.fx.cash || 0);
+    traitOf(w.fx, false);
+    let text = w.text;
+    if (sh.twist) text += '\n' + rnd(C.luck.twistLines);
+    const scene = { home: { scene: 'home', mode: 'rest' }, friends: { scene: 'restaurant' }, side: { scene: 'home', mode: 'side' }, drive: { scene: 'street', phase: 'am' } }[id];
+    S.view = { type: 'result', text, picked: w.label, deltas: d.list, ups: d.ups, blocked: d.blocked, twist: sh.twist, after: 'weekend', scene: Object.assign({ face: faceFor(sh.fx, sh.twist) }, scene) };
+    sfx(sh.twist ? 'twist' : 'good');
+    if (d.ups.length) setTimeout(() => sfx('level'), 350);
+    save(); render();
+  }
+
+  function carSheet() {
+    const L = T.LIFE.lines;
+    sheet(`
+      <h3>${esc(L.carAsk)}</h3>
+      <p class="muted">${esc(L.carDesc)}</p>
+      ${T.LIFE.cars.map((c) => `
+        <div class="asset">
+          <div class="asset-h"><b>${esc(c.name)}</b><span>${man(c.price)}</span></div>
+          <p class="muted">${esc(c.text)}</p>
+          <p class="asset-v">매달 보험·자동차세·정비 ${man(c.monthly)} · 출근한 날 기름값·주차비 ${man(c.commute)} (지금은 ${esc(commuteOf().name)} ${man(commuteOf().cost)}) · 출근할 때 체력 +${c.hp}</p>
+          <button class="btn sm" data-act="buy-car" data-id="${c.id}" ${S.cash < c.price ? 'disabled' : ''}>현금으로 산다</button>
+        </div>`).join('')}
+      <p class="muted">지금 현금 ${man(S.cash)} · 비상금 ${man(emergencyNeed())}은 남겨 두는 게 좋다.</p>
+      <button class="btn primary" data-act="close">안 산다</button>`);
+  }
+  function buyCar(id) {
+    const c = T.LIFE.cars.find((x) => x.id === id);
+    if (!c || S.cash < c.price || S.car) return;
+    S.cash -= c.price;
+    S.car = c.id;
+    const d = apply(c.mental ? { mental: c.mental } : null);
+    log(`${c.name} 구매`, [{ k: 'cash', v: -c.price }].concat(d.list), false);
+    closeSheet();
+    toast(c.text);
+    sfx('coin');
     save(); render();
   }
 
@@ -633,7 +769,7 @@
     S.day++;
     S.dayNo++;
     S.phase = 0;
-    if (S.day >= C.daysPerMonth) payday();
+    if (S.day >= C.daysPerMonth) S.view = { type: 'weekend' };
     else startDay();
   }
 
@@ -641,13 +777,16 @@
     const sal = salary();
     const sp = rnd(C.surprises);
     if (sp.living) S.livingDelta += sp.living;
-    const liv = living();
+    const liv = fixedCost();
     S.cash += sal - liv + (sp.cash || 0);
     const div = Math.round(divMonthly());
     S.cash += div;
+    const spend = Object.assign({}, S.monthSpend);
+    S.monthSpend = { commute: 0, weekend: 0 };
     const est = estateMonth();
+    const tax = taxYear();
     const cover = coverDebt();
-    const slip = { month: S.month, salary: sal, living: liv, surprise: sp, side: Math.round(S.monthSide), div, estate: est, cover, promoted: null, decay: 0, warn: 0 };
+    const slip = { month: S.month, salary: sal, living: liv, other: otherFixed(), rent: S.rent || 0, rentLabel: housingOf().costLabel, car: carOf() ? carOf().monthly : 0, spend, tax, surprise: sp, side: Math.round(S.monthSide), div, estate: est, cover, promoted: null, decay: 0, warn: 0 };
     // 평가가 바닥이면 인사팀 경고. 연달아 쌓이면 권고사직이다.
     if (S.eval < C.warnBelow) { S.warns = (S.warns || 0) + 1; slip.warn = S.warns; } else S.warns = 0;
     if (S.eval >= C.promoteAt && S.rank < C.ranks.length - 1) {
@@ -681,21 +820,7 @@
     const gone = now - (S.lastSeen || now);
     lastTick = now;
     if (S.view.type === 'gate') render();
-    if (gone <= 0) return;
-    const capMs = C.offlineCapHours * 3600000;
-    const used = Math.min(gone, capMs);
-    const inc = hourlyTotal() * used / 3600000;
-    if (inc < 100 || gone < 60000) return;
-    S.cash += inc; S.monthSide += inc; S.totalSide += inc;
-    save(); hud();
-    const h = Math.floor(used / 3600000), m = Math.floor((used % 3600000) / 60000);
-    sheet(`
-      <h3>자리 비운 사이</h3>
-      <p>회사에 있는 동안에도, 자는 동안에도 부업은 일했다.</p>
-      <p class="big money">+${won(inc)}</p>
-      <p class="muted">${h ? h + '시간 ' : ''}${m}분치 수입${gone > capMs ? ` · 부업 수입은 최대 ${C.offlineCapHours}시간까지만 쌓여` : ''}</p>
-      <button class="btn primary" data-act="close">통장 확인 완료</button>`, { queue: true });
-    sfx('coin');
+    // 앱을 꺼 둔 사이에 돈이 저절로 늘지는 않는다. 부업 수입은 하루를 보내야 들어온다.
   }
 
   function tick() {
@@ -707,10 +832,6 @@
       if (workLeft() > 0) { checkAttendance(); render(); sfx('good'); }
       else { const t = $('#gate-left'); if (t) t.textContent = hms(msToMidnight()); }
     }
-    const inc = hourlyTotal() * dt / 3600000;
-    if (!inc) return;
-    S.cash += inc; S.monthSide += inc; S.totalSide += inc;
-    $('#h-cash').textContent = won(S.cash);
   }
 
   // ───────── 형식 ─────────
@@ -726,6 +847,10 @@
     const s = Math.ceil(ms / 1000);
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
     return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`;
+  }
+  // 고정지출을 항목별로 나눠 보여 준다 (입력한 금액이면 같은 비율로 나눈다)
+  function fixedParts(total) {
+    return T.LIFE.fixed.map((f) => `${f.name} ${man(Math.round(total * f.share / 10000) * 10000)}`).join(' · ');
   }
   const pctS = (x) => (x >= 0 ? '+' : '') + (Math.round(x * 1000) / 10).toFixed(1) + '%';
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -780,6 +905,7 @@
       case 'evening': return { scene: 'home' };
       case 'pickjob': return { scene: 'home', mode: 'side' };
       case 'gate': return { scene: 'home', mode: 'rest' };
+      case 'weekend': return { scene: 'street', phase: 'am' };
       case 'daylog': return { scene: 'home', mode: 'rest' };
       case 'setup': return { scene: 'office', phase: 'morning' };
       case 'payday': return { scene: 'office', phase: 'off', mode: 'pay', face: 'happy' };
@@ -791,10 +917,10 @@
   function hud() {
     const ph = T.PHASES[S.phase] || T.PHASES[0];
     const v = S.view.type;
-    $('#h-date').textContent = `입사 ${S.month}개월차 · ${T.DAYS[Math.min(S.day, 4)]}`;
+    $('#h-date').textContent = `입사 ${S.month}개월차 · ${v === 'weekend' ? '주말' : T.DAYS[Math.min(S.day, 4)]}`;
     $('#h-rank').textContent = C.ranks[S.rank].name;
     $('#h-time').textContent = v === 'payday' ? '18:00' : v === 'ending' ? '--:--' : v === 'gate' ? '23:00' : ph.time;
-    $('#h-phase').textContent = v === 'payday' ? '월급날' : v === 'ending' ? '퇴사 완료' : v === 'title' ? '입사 첫날' : v === 'gate' ? '오늘 근무 끝' : ph.label;
+    $('#h-phase').textContent = v === 'weekend' ? '주말' : v === 'payday' ? '월급날' : v === 'ending' ? '퇴사 완료' : v === 'title' ? '입사 첫날' : v === 'gate' ? '오늘 근무 끝' : ph.label;
     $('#h-org').textContent = `${company()} · ${deptName()}`;
     if (TEST) $('#h-pass').textContent = '테스트 모드';
     else {
@@ -811,8 +937,8 @@
     const h = hourlyTotal();
     const focus = JOB[S.focus];
     $('#sidebank').innerHTML = h
-      ? `<b>부업 시급 ${won(h)}</b><span>${focus.name} Lv.${S.side[S.focus].lvl} · 앱을 꺼도 쌓여</span>`
-      : `<b>부업 시급 0원</b><span>퇴근 후에 부업을 시작해 봐</span>`;
+      ? `<b>부업 하루 ${man(Math.round(h * C.dayIncomeHours * (1 - TX.withhold)))}</b><span>${focus.name} Lv.${S.side[S.focus].lvl} · 하루를 보내야 들어와</span>`
+      : `<b>부업 수입 0원</b><span>퇴근 후에 부업을 시작해 봐</span>`;
     const rn = roadNext();
     const showRoad = !['title', 'setup', 'ending'].includes(v);
     $('#h-road').hidden = !showRoad;
@@ -885,6 +1011,19 @@
           <button class="choice" data-act="evening" data-k="side"><span class="num">2</span><span class="lbl">부업을 한다<small>부업▲ 체력▼ 멘탈▼ · 안 풀리는 날도 있다</small></span></button>
           <button class="choice" data-act="evening" data-k="beer"><span class="num">3</span><span class="lbl">친구랑 치맥<small>멘탈▲ 체력▼ 현금▼</small></span></button>
         </div>`;
+    } else if (v.type === 'weekend') {
+      const L = T.LIFE.lines;
+      const opts = T.LIFE.weekend.filter((w) => !w.car || S.car);
+      html = `
+        <div class="who">${esc(L.weekendTitle)}</div>
+        <p class="text">한 주를 버텼다. 주말이 지나면 월급날이다. ${esc(L.weekendAsk)}</p>
+        <div class="choices">${opts.map((w, i) => `
+          <button class="choice" data-act="weekend" data-id="${w.id}">
+            <span class="num">${i + 1}</span>
+            <span class="lbl">${esc(w.label)}<small>${esc(hint({ fx: w.fx }))} · 약 ${man(-w.fx.cash)}</small></span>
+          </button>`).join('')}
+        </div>
+        ${S.car ? `<p class="muted">내 차: ${esc(carOf().name)}</p>` : `<button class="btn" data-act="car">${esc(L.carAsk)}</button>`}`;
     } else if (v.type === 'pickjob') {
       html = `
         <div class="who">어떤 부업을 할까?</div>
@@ -918,11 +1057,17 @@
           <div class="slip-h"><b>급여명세서</b><span>입사 ${s.month}개월차</span></div>
           <table>
             <tr><th>실수령액</th><td class="plus">+${won(s.salary)}</td></tr>
-            <tr><th>생활비<small>월세·식비·통신비·교통비</small></th><td class="minus">-${won(s.living)}</td></tr>
+            ${s.rent ? `<tr><th>${esc(s.rentLabel)}</th><td class="minus">-${won(s.rent)}</td></tr>` : ''}
+            <tr><th>그 밖의 고정지출<small>${esc(fixedParts(s.other != null ? s.other : s.living))}</small></th><td class="minus">-${won(s.other != null ? s.other : s.living)}</td></tr>
+            ${s.car ? `<tr><th>차 보험·자동차세·정비</th><td class="minus">-${won(s.car)}</td></tr>` : ''}
             <tr><th>이번 달 변수<small>${esc(sp.text)}${sp.living ? ` (생활비 매달 +${man(sp.living)})` : ''}</small></th><td class="${(sp.cash || 0) >= 0 ? 'plus' : 'minus'}">${sp.cash ? ((sp.cash > 0 ? '+' : '-') + won(Math.abs(sp.cash))) : '0원'}</td></tr>
             <tr class="sum"><th>이번 달 남은 돈</th><td class="${left >= 0 ? 'plus' : 'minus'}">${left >= 0 ? '+' : ''}${won(left)}</td></tr>
-            <tr><th>부업 수입<small>이미 통장에 들어옴</small></th><td class="plus">+${won(s.side)}</td></tr>
-            ${s.div ? `<tr><th>배당금<small>지수펀드 분배금 (게임용)</small></th><td class="plus">+${won(s.div)}</td></tr>` : ''}
+            <tr><th>부업 수입<small>3.3% 떼고 이미 통장에 들어옴</small></th><td class="plus">+${won(s.side)}</td></tr>
+            ${s.spend && s.spend.commute ? `<tr><th>출근 교통비·점심값<small>출근한 날마다 이미 나감</small></th><td class="minus">-${won(s.spend.commute)}</td></tr>` : ''}
+            ${s.spend && s.spend.weekend ? `<tr><th>주말 지출<small>이미 나감</small></th><td class="minus">-${won(s.spend.weekend)}</td></tr>` : ''}
+            ${s.tax ? `<tr><th>종합소득세 정산<small>1년치 부업·월세 소득 ${man(s.tax.gross)} · 세금 ${man(s.tax.due)} − 미리 뗀 ${man(s.tax.withheld)}</small></th><td class="${s.tax.income > 0 ? 'minus' : 'plus'}">${s.tax.income > 0 ? '-' : '+'}${won(Math.abs(s.tax.income))}</td></tr>
+            ${s.tax.prop ? `<tr><th>재산세<small>원룸 시세 기준 (대략)</small></th><td class="minus">-${won(s.tax.prop)}</td></tr>` : ''}` : ''}
+            ${s.div ? `<tr><th>배당금<small>지수펀드 분배금 (게임용) · 배당소득세 15.4% 뗀 금액</small></th><td class="plus">+${won(s.div)}</td></tr>` : ''}
             ${s.estate ? `<tr><th>월세 − 대출 이자<small>${esc(s.estate.notes.join(' ') || '원룸 ' + S.inv.estates.length + '채 · 금리 ' + S.inv.rate.toFixed(1) + '%')}</small></th><td class="${s.estate.net >= 0 ? 'plus' : 'minus'}">${s.estate.net >= 0 ? '+' : '-'}${won(Math.abs(s.estate.net))}</td></tr>` : ''}
           </table>
           ${(s.cover || []).map((t) => `<p class="warn">${esc(t)}</p>`).join('')}
@@ -1012,8 +1157,17 @@
         <div class="form-row">
           <div><label for="p-salary">월 실수령</label><input id="p-salary" type="number" inputmode="numeric" min="100" max="5000" value="${p.salary || ''}" placeholder="260"><small>만 원</small></div>
         </div>
-        <label for="p-expense">한 달 고정지출 <span class="opt">선택</span></label>
-        <div class="form-unit"><input id="p-expense" type="number" inputmode="numeric" min="0" max="5000" value="${p.expense || ''}" placeholder="월세·식비·통신비 등"><small>만 원</small></div>
+        <label for="p-housing">사는 곳</label>
+        <select id="p-housing">${T.LIFE.housing.map((h) => `<option value="${h.id}"${h.id === p.housing ? ' selected' : ''}>${h.name}</option>`).join('')}</select>
+        <p class="muted" id="p-housing-desc">${esc((T.LIFE.housing.find((h) => h.id === p.housing) || T.LIFE.housing[1]).desc)}</p>
+        <div class="form-unit"><input id="p-housingcost" type="number" inputmode="numeric" min="0" max="1000" value="${p.housingCost != null ? p.housingCost : ''}" placeholder="한 달 주거비 (비우면 기본값)"><small>만 원</small></div>
+        <label for="p-commute">출퇴근</label>
+        <select id="p-commute">${T.LIFE.commutes.map((c) => `<option value="${c.id}"${c.id === p.commute ? ' selected' : ''}>${c.name}</option>`).join('')}</select>
+        <p class="muted" id="p-commute-desc">${esc((T.LIFE.commutes.find((c) => c.id === p.commute) || T.LIFE.commutes[0]).desc)}</p>
+        <label for="p-expense">그 밖의 고정지출 <span class="opt">선택</span></label>
+        <p class="muted">장보기·공과금·보험·통신비처럼 주거비 말고 매달 나가는 돈. 점심값·주말 지출은 게임 안에서 따로 나가.</p>
+        <div class="form-unit"><input id="p-expense" type="number" inputmode="numeric" min="0" max="5000" value="${p.expense != null ? p.expense : ''}" placeholder="비우면 기본값"><small>만 원</small></div>
+        <div class="diff" id="p-diff">${diffLine(p)}</div>
         <label for="p-dream">퇴사하고 하고 싶은 것</label>
         <select id="p-dream">${T.DREAMS.map((d) => `<option value="${d.id}"${d.id === p.dream ? ' selected' : ''}>${d.name}</option>`).join('')}</select>
         <p class="muted" id="p-dream-desc">${esc(dreamDesc(DREAM[p.dream] || DREAM.rest))}</p>
@@ -1025,6 +1179,17 @@
         <p class="muted">입력한 내용은 이 기기에만 저장되고 어디로도 보내지 않아. 비워 두면 기본값을 써.</p>
         <p class="form-err" id="p-err" hidden></p>
       </div>`;
+  }
+
+  // 입사 서류 아래 "시작 난이도": 고른 조합으로 한 달에 남는 돈을 미리 계산한다
+  function diffLine(p) {
+    const sp = startPlan(p, p);
+    return `<b>시작 난이도 ${sp.diff.stars} ${sp.diff.name}</b><span>월급 ${man(sp.pay)} − 예상 생활비 ${man(sp.out)} = 한 달에 ${sp.left >= 0 ? '' : '마이너스 '}${man(Math.abs(sp.left))}</span>`;
+  }
+  function formDraft() {
+    const v = (id) => { const x = $(id); return x && x.value.trim() !== '' ? Math.round(Number(x.value)) : null; };
+    const rk = $('#p-rank').value;
+    return Object.assign({}, C.defaultProfile, { years: v('#p-years') || 1, rank: rk === '' ? null : Number(rk), salary: v('#p-salary'), expense: v('#p-expense'), housing: $('#p-housing').value, housingCost: v('#p-housingcost'), commute: $('#p-commute').value });
   }
 
   function readProfile() {
@@ -1042,6 +1207,9 @@
       rank: $('#p-rank').value === '' ? null : Number($('#p-rank').value),
       salary: num('#p-salary', 100, 5000),
       expense: num('#p-expense', 0, 5000),
+      housing: $('#p-housing').value,
+      housingCost: num('#p-housingcost', 0, 1000),
+      commute: $('#p-commute').value,
       dream: $('#p-dream').value,
       dreamName: $('#p-dreamname').value.trim(),
       dreamCost: num('#p-dreamcost', 100, 100000),
@@ -1049,7 +1217,8 @@
     const err = [];
     if (Number.isNaN(p.years)) err.push('연차는 1~40 사이 숫자로 적어 줘.');
     if (Number.isNaN(p.salary)) err.push('월 실수령은 만 원 단위로 100~5000 사이로 적어 줘. 예: 320');
-    if (Number.isNaN(p.expense)) err.push('고정지출은 만 원 단위 숫자로 적어 줘. 예: 180');
+    if (Number.isNaN(p.expense)) err.push('고정지출은 만 원 단위 숫자로 적어 줘. 예: 90');
+    if (Number.isNaN(p.housingCost)) err.push('주거비는 만 원 단위 숫자로 적어 줘. 예: 60');
     if (p.dream === 'custom' && !p.dreamName) err.push('하고 싶은 걸 한 줄로 적어 줘.');
     if (p.dream === 'custom' && (Number.isNaN(p.dreamCost) || !p.dreamCost)) err.push('꿈에 필요한 돈을 만 원 단위로 적어 줘. 예: 5000');
     if (err.length) { const e = $('#p-err'); e.textContent = err.join(' '); e.hidden = false; return null; }
@@ -1074,10 +1243,12 @@
     const persona = total && share[topKey] >= 0.3 ? topKey : 'balanced';
     const r = { share, total, persona, sideLevel: maxLvl(), savingRate: null };
     if (p.salary && p.expense != null) {
-      const save = p.salary - p.expense;
+      // 입력한 고정지출 + 게임 속 출근·주말 지출 평균
+      r.spend = Math.round(living() / 10000);
+      const save = p.salary - r.spend;
       r.savingRate = save / p.salary;
       r.save = save;
-      r.fiTarget = p.expense * 12 * 25;
+      r.fiTarget = r.spend * 12 * 25;
       r.fiYears = save > 0 ? r.fiTarget / (save * 12) : null;
     }
     const sideMonth = hourlyTotal() * C.dayIncomeHours * C.daysPerMonth;
@@ -1093,17 +1264,17 @@
     const needCash = dreamNeed().cash + emergencyNeed();
     const gap = Math.max(0, needCash - netWorth());
     const gameMonths = gap <= 0 ? 0 : monthSave > 0 ? Math.ceil(gap / monthSave) : null;
-    const game = !dreamNeed().cash ? '이 꿈은 돈을 모으는 것보다 월 부수입(부업+월세)을 키우는 게 핵심이다.'
+    const game = !dreamNeed().cash ? '이 꿈은 돈을 모으는 것보다 월세·배당 같은 자본소득을 키우는 게 핵심이다.'
       : gap <= 0 ? '돈은 이미 모였다. 남은 조건만 채우면 사직서를 낼 수 있다.'
       : gameMonths ? `투자 수익 없이 지금 페이스(월급 − 생활비 + 부업·월세)로만 모으면 약 ${gameMonths}개월 뒤. 실제로는 하루에 하루씩이라 약 ${gameMonths * C.daysPerMonth}일 걸린다. 재테크가 이 기간을 줄이거나 늘린다.`
       : '지금 페이스로는 돈이 모이지 않는다. 생활비가 월급보다 크다.';
     let realLine = '';
     if (r.save != null) {
       const d = dream();
-      const realNeed = (d.cash === 'living12' ? p.expense * 12 : d.cash === 'living6' ? p.expense * 6 : d.cash === 'custom' ? (p.dreamCost || 0)
-        : d.cash === 'goal' || d.passive ? r.fiTarget : d.cash / 10000) + (d.passive ? 0 : p.expense * C.emergencyMonths);
+      const realNeed = (d.cash === 'living12' ? r.spend * 12 : d.cash === 'living6' ? r.spend * 6 : d.cash === 'custom' ? (p.dreamCost || 0)
+        : d.cash === 'goal' || d.capital ? r.fiTarget : d.cash / 10000) + (d.capital ? 0 : r.spend * C.emergencyMonths);
       const months = r.save > 0 ? Math.ceil(realNeed / r.save) : null;
-      realLine = `<p class="muted">현실에서는: ${esc(dreamName())}에 약 ${man(realNeed * 10000)}이 필요하다${d.passive ? ' (생활비 25년치, 4% 법칙)' : ` (비상금 ${C.emergencyMonths}개월치 포함)`}. 한 달에 ${man(r.save * 10000)}씩 모으면 ${months ? `약 ${months}개월(${(months / 12).toFixed(1)}년)` : '모을 수 없다'}. 투자 수익과 지금까지 모은 돈은 빼고 단순 계산했어.</p>`;
+      realLine = `<p class="muted">현실에서는: ${esc(dreamName())}에 약 ${man(realNeed * 10000)}이 필요하다${d.capital ? ' (생활비 25년치, 4% 법칙)' : ` (비상금 ${C.emergencyMonths}개월치 포함)`}. 한 달에 ${man(r.save * 10000)}씩 모으면 ${months ? `약 ${months}개월(${(months / 12).toFixed(1)}년)` : '모을 수 없다'}. 투자 수익과 지금까지 모은 돈은 빼고 단순 계산했어.</p>`;
     }
     const desc = dream().id === 'custom' ? `직접 정한 꿈. 실제로 필요한 돈 ${man((p.dreamCost || 3000) * 10000)}.` : dreamDesc(dream());
     return `<div class="plan"><b>${esc(dreamName())}</b><p>${esc(desc)}</p></div>
@@ -1151,9 +1322,13 @@
           ${check('현금', man(S.cash), S.cash < emergencyNeed(), S.cash >= emergencyNeed() * 2)}
           ${check('주식 평가액', man(stocksTotal()), false, false)}
           ${check('원룸 (대출 뺀 값)', man(estateEquity()), false, false)}
+          ${S.deposit ? check('전세 보증금 (묶여 있음, 꿈 자금에 안 셈)', man(S.deposit), false, false) : ''}
           ${check('순자산', man(netWorth()), netWorth() < 0, false)}
           ${check('월 부수입 (부업+월세+배당)', man(passive()), passive() <= 0, passive() >= living() * 0.5)}
+          ${check('올해 부업·월세 소득', man(S.tax.side + S.tax.rent), false, false)}
+          ${check('종합소득세 예상 (미리 뗀 세금 빼고)', man(Math.max(0, incomeTaxDue() - S.tax.withheld)), false, false)}
         </ul>
+        <p class="muted">세금: 월급은 이미 세금 뗀 실수령이야. 부업 수입은 3.3%를 먼저 떼고, 게임 속 12개월마다 월급 1년치에 부업·월세 소득을 얹어 종합소득세(6~45% 누진, 지방소득세 포함)를 정산해. 공제·경비는 빼지 않은 단순 계산이야. 배당은 15.4%를 떼고 들어와. 국내 주식 매매차익은 세금이 없다고 보고, 수수료·거래세는 대략 ${(IV.fee * 100).toFixed(1)}%로 잡았어.</p>
         <p class="muted">${esc(T.INVEST.disclaimer)}</p>
         <h4>내 퇴사 계획</h4>
         ${planBlock(p, r)}
@@ -1350,6 +1525,9 @@
     else if (a === 'resign') resign();
     else if (a === 'end') ending(b.dataset.id, b.dataset.r);
     else if (a === 'angry') angry();
+    else if (a === 'weekend') weekend(b.dataset.id);
+    else if (a === 'car') carSheet();
+    else if (a === 'buy-car') buyCar(b.dataset.id);
     else if (a === 'invest') invest();
     else if (a === 'road') roadSheet();
     else if (['buy', 'sell', 'estate-buy', 'estate-sell'].includes(a)) investAct(a, b);
@@ -1388,11 +1566,17 @@
     document.addEventListener('keydown', onKey);
     document.addEventListener('change', (e) => {
       if (e.target.id === 'p-dept') $('#p-deptname').hidden = e.target.value !== 'etc';
+      if (e.target.id === 'p-housing') $('#p-housing-desc').textContent = T.LIFE.housing.find((h) => h.id === e.target.value).desc;
+      if (e.target.id === 'p-commute') $('#p-commute-desc').textContent = T.LIFE.commutes.find((c) => c.id === e.target.value).desc;
       if (e.target.id === 'p-dream') {
         $('#p-dream-desc').textContent = dreamDesc(DREAM[e.target.value] || DREAM.rest);
         $('.form-custom').hidden = e.target.value !== 'custom';
       }
     });
+    // 입사 서류를 고칠 때마다 시작 난이도를 다시 계산한다
+    const redraw = (e) => { if (/^p-(years|rank|salary|expense|housing|housingcost|commute)$/.test(e.target.id) && $('#p-diff')) $('#p-diff').innerHTML = diffLine(formDraft()); };
+    document.addEventListener('input', redraw);
+    document.addEventListener('change', redraw);
     document.addEventListener('pointerdown', () => T.Sound && T.Sound.unlock(), { once: true });
     if (!S || S.v !== 1) {
       newGame();
