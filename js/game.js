@@ -42,6 +42,7 @@
       rank, salaryBonus: 0, livingDelta: 0,
       scale, livingBase: p.expense ? p.expense * 10000 : Math.round(C.living * ratio),
       goal: Math.max(5e7, Math.round(C.freedomGoal * ratio / 1e7) * 1e7),
+      ratio, inv: newInv(),
       traits: {}, dayLog: [],
       dayNo: 0, story: null, storiesDone: [], storyRest: 0,
       side: Object.fromEntries(T.SIDEJOBS.map((j) => [j.id, { lvl: 0, prog: 0 }])),
@@ -56,6 +57,13 @@
     save();
   }
 
+  // 재테크: 주식은 units(좌수)로, 가격은 1,000에서 시작하는 지수로 센다
+  function newInv() {
+    const ids = T.INVEST.stocks.map((x) => x.id);
+    const zero = () => Object.fromEntries(ids.map((id) => [id, 0]));
+    return { units: zero(), cost: zero(), price: Object.fromEntries(ids.map((id) => [id, 1000])), move: zero(), news: '', rate: C.invest.estate.rate, estates: [], road: [], bought: false };
+  }
+
   // 1차 버전 저장을 이어서 쓸 수 있게 새로 생긴 칸을 채운다
   function migrate(s) {
     if (!s.bags) s.bags = {};
@@ -64,6 +72,7 @@
     if (!s.traits) s.traits = {};
     if (!s.dayLog) s.dayLog = [];
     if (s.dayNo == null) { s.dayNo = (s.month - 1) * C.daysPerMonth + s.day; s.story = null; s.storiesDone = []; s.storyRest = 0; }
+    if (!s.inv) { s.inv = newInv(); s.ratio = s.ratio || 1; }
     return s;
   }
 
@@ -92,6 +101,150 @@
   }
   const hourlyTotal = () => T.SIDEJOBS.reduce((a, j) => a + hourly(j.id), 0);
   const maxLvl = () => Math.max(...T.SIDEJOBS.map((j) => S.side[j.id].lvl));
+  // ───────── 재테크 ─────────
+  const IV = C.invest;
+  const STOCK = Object.fromEntries(T.INVEST.stocks.map((x) => [x.id, x]));
+  const stockVal = (id) => S.inv.units[id] * S.inv.price[id];
+  const stocksTotal = () => T.INVEST.stocks.reduce((a, x) => a + stockVal(x.id), 0);
+  const estateEquity = () => S.inv.estates.reduce((a, e) => a + e.price - e.loan, 0);
+  const netWorth = () => S.cash + stocksTotal() + estateEquity();
+  const emergencyNeed = () => Math.round(living() * C.emergencyMonths / 10000) * 10000;
+  const estateNet = (e) => Math.round(e.rent - e.loan * S.inv.rate / 100 / 12);
+  const rentNet = () => S.inv.estates.reduce((a, e) => a + estateNet(e), 0);
+  const sideMonthly = () => hourlyTotal() * C.dayIncomeHours * C.daysPerMonth;
+  const divMonthly = () => T.INVEST.stocks.reduce((a, x) => a + stockVal(x.id) * (IV.stocks[x.id].div || 0), 0);
+  const passive = () => Math.round(sideMonthly() + rentNet() + divMonthly());
+  const road = (id) => S.inv.road.includes(id);
+  const stocksOpen = () => road('emergency');
+  const estateOpen = () => road('seed');
+  const lot = (i) => Math.round(IV.lots[i] * (S.ratio || 1) / 100000) * 100000;
+  function estateQuote() {
+    const E = IV.estate;
+    const price = Math.round(E.price * (S.ratio || 1) / 1e6) * 1e6;
+    const loan = Math.round(price * E.ltv);
+    return { price, loan, need: price - loan + Math.round(price * E.tax), rent: Math.round(E.rent * (S.ratio || 1) / 10000) * 10000 };
+  }
+  function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function pickW(list) { const sum = list.reduce((a, x) => a + (x.w || 1), 0); let r = Math.random() * sum; for (const x of list) { if ((r -= (x.w || 1)) <= 0) return x; } return list[list.length - 1]; }
+
+  // 장 마감 (매일 밤): 가격이 움직이고, 가끔 사건이 터지고, 내놓은 원룸이 팔린다
+  function marketClose() {
+    const inv = S.inv;
+    const ev = Math.random() < IV.eventChance ? pickW(T.INVEST.marketEvents) : null;
+    for (const x of T.INVEST.stocks) {
+      const p = IV.stocks[x.id];
+      let m = Math.exp(p.mu - p.sigma * p.sigma / 2 + p.sigma * gauss());
+      if (ev && ev[x.id]) m *= 1 + ev[x.id];
+      const before = inv.price[x.id];
+      inv.price[x.id] = Math.max(10, before * m);
+      inv.move[x.id] = inv.price[x.id] / before - 1;
+    }
+    if (ev && ev.rate) inv.rate = clamp(inv.rate + ev.rate, 1.5, 9);
+    inv.news = ev ? ev.text : '';
+    const sold = [];
+    inv.estates = inv.estates.filter((e) => {
+      if (e.selling == null || S.dayNo + 1 < e.selling) return true;
+      const got = Math.round(e.price * (1 - IV.estate.sellFee) - e.loan);
+      S.cash += got; sold.push(got);
+      return false;
+    });
+    if (sold.length) inv.news = (inv.news ? inv.news + ' ' : '') + `${T.INVEST.lines.sold} 손에 쥔 돈 ${man(sold.reduce((a, b) => a + b, 0))}.`;
+  }
+
+  // 월급날: 월세가 들어오고 대출 이자가 나간다. 시세도 한 달치 움직인다.
+  function estateMonth() {
+    const E = IV.estate, inv = S.inv;
+    if (!inv.estates.length) return null;
+    let net = 0;
+    const notes = [];
+    for (const e of inv.estates) {
+      const ev = Math.random() < E.eventChance ? pickW(T.INVEST.estateEvents) : null;
+      e.price = Math.round(e.price * (1 + E.mu + E.sigma * gauss() + (ev && ev.price || 0)) / 1e5) * 1e5;
+      let n = estateNet(e);
+      if (ev && ev.vacancy) n -= e.rent;
+      if (ev && ev.cash) n += Math.round(ev.cash * (S.ratio || 1) / 1000) * 1000;
+      if (ev) notes.push(ev.text);
+      net += n;
+    }
+    S.cash += net;
+    return { net, notes };
+  }
+
+  // 통장이 마이너스면 주식부터 팔고, 그래도 모자라면 원룸이 급매로 넘어간다
+  function coverDebt() {
+    const notes = [];
+    if (S.cash >= 0) return notes;
+    if (stocksTotal() > 0) {
+      for (const x of T.INVEST.stocks) { S.cash += stockVal(x.id) * (1 - IV.fee); S.inv.units[x.id] = 0; S.inv.cost[x.id] = 0; }
+      notes.push(T.INVEST.lines.stockCover);
+    }
+    if (S.cash < 0 && S.inv.estates.length) {
+      const e = S.inv.estates.shift();
+      S.cash += Math.round(e.price * (1 - IV.estate.firesale) - e.loan);
+      notes.push(T.INVEST.lines.firesale);
+    }
+    return notes;
+  }
+
+  function buyStock(id, amt) {
+    if (amt > S.cash || amt <= 0) { toast(T.INVEST.lines.noCash); return false; }
+    S.cash -= amt;
+    S.inv.units[id] += amt * (1 - IV.fee) / S.inv.price[id];
+    S.inv.cost[id] += amt;
+    S.inv.bought = true;
+    return true;
+  }
+  function sellStock(id, part) {
+    const u = S.inv.units[id] * part;
+    if (u <= 0) return false;
+    S.cash += u * S.inv.price[id] * (1 - IV.fee);
+    S.inv.cost[id] *= 1 - part;
+    S.inv.units[id] -= u;
+    return true;
+  }
+  function buyEstate() {
+    const q = estateQuote();
+    if (S.inv.estates.length >= IV.estate.max) return false;
+    if (S.cash < q.need) { toast(T.INVEST.lines.noCash + ` 계약금과 세금 ${man(q.need)}이 필요해.`); return false; }
+    S.cash -= q.need;
+    S.inv.estates.push({ price: q.price, loan: q.loan, rent: q.rent, paid: q.need, selling: null });
+    return true;
+  }
+
+  // ───────── 퇴사 로드맵 ─────────
+  function roadPct(id) {
+    switch (id) {
+      case 'emergency': return S.cash / emergencyNeed();
+      case 'invest': return S.inv.bought ? 1 : 0;
+      case 'seed': return netWorth() / estateQuote().need;
+      case 'passive': return passive() / (living() * IV.passiveStep);
+      case 'half': return goalPct() / 0.5;
+      case 'ready': return dreamReady() ? 1 : goalPct();
+    }
+    return 0;
+  }
+  const roadNext = () => T.ROADMAP.find((r) => !road(r.id));
+  // 다음 단계 하나만 본다. 단계는 차례대로 넘는다.
+  function checkRoad() {
+    if (!S || !S.inv || ['title', 'setup', 'ending'].includes(S.view.type)) return;
+    const r = roadNext();
+    if (!r || roadPct(r.id) < 1) return;
+    S.inv.road.push(r.id);
+    const d = apply(r.reward);
+    const i = T.ROADMAP.indexOf(r);
+    const nx = T.ROADMAP[i + 1];
+    save();
+    sheet(`
+      <h3>퇴사 로드맵 ${i + 1}/${T.ROADMAP.length}</h3>
+      <div class="stamp-big">결재</div>
+      <p class="levelup"><b>${esc(r.title)}</b> ${esc(r.desc)}</p>
+      ${r.unlock ? `<p class="unlock">${esc(r.unlock)}</p>` : ''}
+      ${d.list.length ? `<div class="deltas">${d.list.map(chip).join('')}</div>` : ''}
+      ${nx ? `<p class="muted">다음 목표: ${esc(nx.title)}</p>` : '<p class="muted">이제 사직서 서랍을 열어 봐.</p>'}
+      <button class="btn primary" data-act="close">도장 쾅</button>`, { queue: true });
+    sfx('stamp'); setTimeout(() => sfx('level'), 250);
+  }
+
   // ───────── 퇴사 계획서 (꿈) ─────────
   const dream = () => DREAM[profile().dream] || DREAM.rest;
   function dreamName() {
@@ -102,17 +255,19 @@
     const d = dream(), p = profile();
     const c = d.cash;
     const cash = c === 'living12' ? living() * 12 : c === 'living6' ? living() * 6 : c === 'goal' ? goal()
-      : c === 'custom' ? (p.dreamCost || 3000) * 10000 : c;
-    return { cash: Math.round(cash * C.dreamScale / 10000) * 10000, side: d.side || null };
+      : c === 'custom' ? (p.dreamCost || 3000) * 10000 : (c || 0);
+    return { cash: Math.round(cash / 10000) * 10000, side: d.side || null, passive: d.passive ? Math.round(living() * d.passive / 10000) * 10000 : 0 };
   }
   function sideBest(ids) { return Math.max(...ids.map((id) => S.side[id].lvl)); }
+  // 사직서 조건: 꿈 자금(순자산) + 현금 비상금 + (꿈에 따라) 부업 레벨·월 부수입
   function dreamParts() {
     const n = dreamNeed();
-    const parts = [{ label: '현금', have: S.cash, need: n.cash, pct: clamp(S.cash / n.cash, 0, 1), money: true }];
-    if (n.side) {
-      const have = sideBest(n.side.ids);
-      parts.push({ label: n.side.ids.map((id) => JOB[id].name).join('·') + ' 레벨', have, need: n.side.lvl, pct: clamp(have / n.side.lvl, 0, 1) });
-    }
+    const part = (label, have, need, money) => ({ label, have, need, pct: clamp(have / need, 0, 1), money });
+    const parts = [];
+    if (n.cash) parts.push(part('꿈 자금 (순자산)', netWorth(), n.cash, true));
+    parts.push(part(`비상금 (현금 ${C.emergencyMonths}개월치)`, S.cash, emergencyNeed(), true));
+    if (n.side) parts.push(part(n.side.ids.map((id) => JOB[id].name).join('·') + ' 레벨', sideBest(n.side.ids), n.side.lvl, false));
+    if (n.passive) parts.push(part('월 부수입 (부업+월세+배당)', passive(), n.passive, true));
     return parts;
   }
   const dreamDesc = (d) => d.desc + '\n' + T.DREAM_NOTE.pace(d);
@@ -404,6 +559,7 @@
       if (T.PHASES[S.phase].id === 'evening') S.view = { type: 'evening' };
       else S.view = { type: 'event', id: pickEvent() };
     } else if (after === 'night' || after === 'collapse') {
+      marketClose();
       planStory();
       S.view = { type: 'daylog', log: S.dayLog, month: S.month, day: S.day, teaser: teaser(), after: 'endday' };
       S.dayLog = [];
@@ -487,7 +643,11 @@
     if (sp.living) S.livingDelta += sp.living;
     const liv = living();
     S.cash += sal - liv + (sp.cash || 0);
-    const slip = { month: S.month, salary: sal, living: liv, surprise: sp, side: Math.round(S.monthSide), promoted: null, decay: 0, warn: 0 };
+    const div = Math.round(divMonthly());
+    S.cash += div;
+    const est = estateMonth();
+    const cover = coverDebt();
+    const slip = { month: S.month, salary: sal, living: liv, surprise: sp, side: Math.round(S.monthSide), div, estate: est, cover, promoted: null, decay: 0, warn: 0 };
     // 평가가 바닥이면 인사팀 경고. 연달아 쌓이면 권고사직이다.
     if (S.eval < C.warnBelow) { S.warns = (S.warns || 0) + 1; slip.warn = S.warns; } else S.warns = 0;
     if (S.eval >= C.promoteAt && S.rank < C.ranks.length - 1) {
@@ -567,6 +727,7 @@
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
     return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`;
   }
+  const pctS = (x) => (x >= 0 ? '+' : '') + (Math.round(x * 1000) / 10).toFixed(1) + '%';
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const para = (s) => esc(s).replace(/\n/g, '<br>');
 
@@ -652,6 +813,12 @@
     $('#sidebank').innerHTML = h
       ? `<b>부업 시급 ${won(h)}</b><span>${focus.name} Lv.${S.side[S.focus].lvl} · 앱을 꺼도 쌓여</span>`
       : `<b>부업 시급 0원</b><span>퇴근 후에 부업을 시작해 봐</span>`;
+    const rn = roadNext();
+    const showRoad = !['title', 'setup', 'ending'].includes(v);
+    $('#h-road').hidden = !showRoad;
+    if (showRoad) $('#h-road').innerHTML = rn ? `<span>다음 목표 ${T.ROADMAP.indexOf(rn) + 1}/${T.ROADMAP.length}</span><b>${esc(rn.title)}</b><em>${Math.floor(clamp(roadPct(rn.id), 0, 1) * 100)}%</em>` : '<span>퇴사 로드맵</span><b>완주. 사직서를 낼 수 있다</b><em>100%</em>';
+    $('#btn-invest').disabled = ['title', 'setup', 'ending'].includes(v);
+    $('#btn-invest').classList.toggle('locked', !stocksOpen());
     $('#btn-resign').disabled = ['ending', 'title', 'setup'].includes(v);
     $('#cover').hidden = v !== 'title';
     $('#btn-report').disabled = ['title', 'setup'].includes(v);
@@ -755,7 +922,10 @@
             <tr><th>이번 달 변수<small>${esc(sp.text)}${sp.living ? ` (생활비 매달 +${man(sp.living)})` : ''}</small></th><td class="${(sp.cash || 0) >= 0 ? 'plus' : 'minus'}">${sp.cash ? ((sp.cash > 0 ? '+' : '-') + won(Math.abs(sp.cash))) : '0원'}</td></tr>
             <tr class="sum"><th>이번 달 남은 돈</th><td class="${left >= 0 ? 'plus' : 'minus'}">${left >= 0 ? '+' : ''}${won(left)}</td></tr>
             <tr><th>부업 수입<small>이미 통장에 들어옴</small></th><td class="plus">+${won(s.side)}</td></tr>
+            ${s.div ? `<tr><th>배당금<small>지수펀드 분배금 (게임용)</small></th><td class="plus">+${won(s.div)}</td></tr>` : ''}
+            ${s.estate ? `<tr><th>월세 − 대출 이자<small>${esc(s.estate.notes.join(' ') || '원룸 ' + S.inv.estates.length + '채 · 금리 ' + S.inv.rate.toFixed(1) + '%')}</small></th><td class="${s.estate.net >= 0 ? 'plus' : 'minus'}">${s.estate.net >= 0 ? '+' : '-'}${won(Math.abs(s.estate.net))}</td></tr>` : ''}
           </table>
+          ${(s.cover || []).map((t) => `<p class="warn">${esc(t)}</p>`).join('')}
           <div class="slip-f">통장 잔고 ${won(S.cash)}</div>
         </div>
         ${s.promoted ? `<p class="levelup"><b>승진!</b> 오늘부터 ${s.promoted}이다. 월급이 올랐다.</p>`
@@ -765,21 +935,23 @@
     } else if (v.type === 'ending') {
       const e = endingOf(v);
       const got = M.endings || {};
-      const dex = T.DREAMS.map((d) => ({ key: 'dream:' + d.id, label: d.id === 'custom' ? '내 꿈' : d.ending.title.replace(' 엔딩', '') }))
-        .concat([{ key: 'rehire', label: '재취업' }]);
+      // 도감은 꿈 퇴사만 센다. 홧김·번아웃·권고사직은 실패 퇴사로 따로 센다.
+      const dex = T.DREAMS.map((d) => ({ key: 'dream:' + d.id, label: d.id === 'custom' ? '내 꿈' : d.ending.title.replace(' 엔딩', '') }));
+      const failed = v.id === 'rehire';
       const best = T.SIDEJOBS.reduce((a, j) => (S.side[j.id].lvl > S.side[a].lvl ? j.id : a), 'blog');
       html = `
-        <div class="who stamp-label">사직서 수리됨</div>
+        <div class="who stamp-label${failed ? ' fail' : ''}">${failed ? '실패 퇴사' : '사직서 수리됨'}</div>
         <h2 class="ending-title">${e.title}</h2>
         <p class="line">${esc(v.reason === 'burnout' ? e.burnoutLine : v.reason === 'fired' ? e.firedLine : e.line)}</p>
         ${e.body.map((b) => `<p class="text">${esc(fmt(b))}</p>`).join('')}
         <div class="summary">
-          <span>${esc(company())}</span><span>출근 ${S.dayNo + 1}일</span><span>입사 ${S.month}개월</span><span>${C.ranks[S.rank].name}</span><span>${won(S.cash)}</span><span>${JOB[best].name} Lv.${S.side[best].lvl}</span>
+          <span>${esc(company())}</span><span>출근 ${S.dayNo + 1}일</span><span>입사 ${S.month}개월</span><span>${C.ranks[S.rank].name}</span><span>순자산 ${man(netWorth())}</span><span>${JOB[best].name} Lv.${S.side[best].lvl}</span>
         </div>
-        <div class="dex"><b>엔딩 도감 ${dex.filter((x) => got[x.key]).length}/${dex.length}</b>
+        <div class="dex"><b>꿈 도감 ${dex.filter((x) => got[x.key]).length}/${dex.length}</b>
           ${dex.map((x) => `<span class="${got[x.key] ? 'got' : ''}">${got[x.key] ? x.label : '???'}</span>`).join('')}
         </div>
-        <p class="muted">${esc(T.DREAM_NOTE.season(S.dayNo + 1, T.DREAMS.filter((d) => !got['dream:' + d.id]).length))}</p>
+        ${got.rehire ? `<p class="muted">실패 퇴사 ${got.rehire}번</p>` : ''}
+        <p class="muted">${esc(T.DREAM_NOTE.season(S.dayNo + 1, T.DREAMS.filter((d) => !got['dream:' + d.id]).length, failed))}</p>
         <div class="row">
           <button class="btn" data-act="share">결과 공유하기</button>
           <button class="btn primary" data-act="restart">다음 시즌 입사</button>
@@ -789,6 +961,7 @@
     card.innerHTML = html;
     card.classList.remove('in'); void card.offsetWidth; card.classList.add('in');
     paint();
+    checkRoad();
   }
 
   // ───────── 하루 근무 일지 ─────────
@@ -815,6 +988,7 @@
         <div class="log-sum"><b>오늘 합계</b><div class="deltas">${total}</div></div>
         <p class="log-line">“${esc(line)}”</p>
       </div>
+      ${stocksOpen() ? `<div class="market"><b>오늘의 시장</b><p>${T.INVEST.stocks.map((x) => `${esc(x.name)} <em class="${S.inv.move[x.id] >= 0 ? 'up' : 'down'}">${pctS(S.inv.move[x.id])}</em>`).join(' · ')}</p>${S.inv.news ? `<p class="muted">${esc(S.inv.news)}</p>` : ''}</div>` : ''}
       ${v.teaser ? `<div class="teaser"><b>내일 예고</b><p>${esc(fmt(v.teaser))}</p></div>` : ''}
       <p class="muted">${esc(dreamName())}까지 ${Math.floor(goalPct() * 100)}% · ${tomorrow}${M.streak && M.streak.n > 1 ? ` · 실제로 ${M.streak.n}일 연속 출근 중` : ''}</p>
       <button class="btn primary" data-act="next">잠자리에 든다 ›</button>
@@ -915,19 +1089,21 @@
   function planBlock(p, r) {
     const parts = dreamParts();
     const rows = parts.map((x) => `<li><span>${x.label}</span><b>${x.money ? man(Math.max(0, x.have)) + ' / ' + man(x.need) : 'Lv.' + x.have + ' / ' + x.need}</b><em class="${x.pct >= 1 ? 'good' : ''}">${Math.floor(x.pct * 100)}%</em></li>`).join('');
-    const monthSave = salary() - living() + hourlyTotal() * C.dayIncomeHours * C.daysPerMonth;
-    const gap = Math.max(0, parts[0].need - S.cash);
+    const monthSave = salary() - living() + passive();
+    const needCash = dreamNeed().cash + emergencyNeed();
+    const gap = Math.max(0, needCash - netWorth());
     const gameMonths = gap <= 0 ? 0 : monthSave > 0 ? Math.ceil(gap / monthSave) : null;
-    const game = gap <= 0 ? '현금은 이미 모였다. 남은 조건만 채우면 사직서를 낼 수 있다.'
-      : gameMonths ? `지금 게임 페이스(월급 − 생활비 + 부업)면 현금은 약 ${gameMonths}개월 뒤에 모인다. 실제로는 하루에 하루씩이라 약 ${gameMonths * C.daysPerMonth}일 걸린다.`
-      : '지금 게임 페이스로는 돈이 모이지 않는다. 생활비가 월급보다 크다.';
+    const game = !dreamNeed().cash ? '이 꿈은 돈을 모으는 것보다 월 부수입(부업+월세)을 키우는 게 핵심이다.'
+      : gap <= 0 ? '돈은 이미 모였다. 남은 조건만 채우면 사직서를 낼 수 있다.'
+      : gameMonths ? `투자 수익 없이 지금 페이스(월급 − 생활비 + 부업·월세)로만 모으면 약 ${gameMonths}개월 뒤. 실제로는 하루에 하루씩이라 약 ${gameMonths * C.daysPerMonth}일 걸린다. 재테크가 이 기간을 줄이거나 늘린다.`
+      : '지금 페이스로는 돈이 모이지 않는다. 생활비가 월급보다 크다.';
     let realLine = '';
     if (r.save != null) {
       const d = dream();
-      const realNeed = d.cash === 'living12' ? p.expense * 12 : d.cash === 'living6' ? p.expense * 6 : d.cash === 'custom' ? (p.dreamCost || 0)
-        : d.cash === 'goal' ? r.fiTarget : d.cash / 10000;
+      const realNeed = (d.cash === 'living12' ? p.expense * 12 : d.cash === 'living6' ? p.expense * 6 : d.cash === 'custom' ? (p.dreamCost || 0)
+        : d.cash === 'goal' || d.passive ? r.fiTarget : d.cash / 10000) + (d.passive ? 0 : p.expense * C.emergencyMonths);
       const months = r.save > 0 ? Math.ceil(realNeed / r.save) : null;
-      realLine = `<p class="muted">현실에서는: ${esc(dreamName())}에 약 ${man(realNeed * 10000)}이 필요하다. 한 달에 ${man(r.save * 10000)}씩 모으면 ${months ? `약 ${months}개월(${(months / 12).toFixed(1)}년)` : '모을 수 없다'}. 투자 수익과 지금까지 모은 돈은 빼고 단순 계산했어.</p>`;
+      realLine = `<p class="muted">현실에서는: ${esc(dreamName())}에 약 ${man(realNeed * 10000)}이 필요하다${d.passive ? ' (생활비 25년치, 4% 법칙)' : ` (비상금 ${C.emergencyMonths}개월치 포함)`}. 한 달에 ${man(r.save * 10000)}씩 모으면 ${months ? `약 ${months}개월(${(months / 12).toFixed(1)}년)` : '모을 수 없다'}. 투자 수익과 지금까지 모은 돈은 빼고 단순 계산했어.</p>`;
     }
     const desc = dream().id === 'custom' ? `직접 정한 꿈. 실제로 필요한 돈 ${man((p.dreamCost || 3000) * 10000)}.` : dreamDesc(dream());
     return `<div class="plan"><b>${esc(dreamName())}</b><p>${esc(desc)}</p></div>
@@ -970,6 +1146,15 @@
           ${check('월급 의존도', pct(r.dependency), r.dependency > 0.9, r.dependency < 0.6)}
           ${check(esc(shortName(dreamName(), 8)) + '까지', pct(goalPct()), goalPct() < 0.1, goalPct() >= 0.6)}
         </ul>
+        <h4>내 자산</h4>
+        <ul class="checks">
+          ${check('현금', man(S.cash), S.cash < emergencyNeed(), S.cash >= emergencyNeed() * 2)}
+          ${check('주식 평가액', man(stocksTotal()), false, false)}
+          ${check('원룸 (대출 뺀 값)', man(estateEquity()), false, false)}
+          ${check('순자산', man(netWorth()), netWorth() < 0, false)}
+          ${check('월 부수입 (부업+월세+배당)', man(passive()), passive() <= 0, passive() >= living() * 0.5)}
+        </ul>
+        <p class="muted">${esc(T.INVEST.disclaimer)}</p>
         <h4>내 퇴사 계획</h4>
         ${planBlock(p, r)}
         <h4>내 실제 숫자</h4>
@@ -1011,12 +1196,104 @@
           <b>${esc(dreamName())}</b>
           ${parts.map((x) => `<span>${x.label} ${x.money ? man(Math.max(0, x.have)) + ' / ' + man(x.need) : 'Lv.' + x.have + ' / ' + x.need}</span><span class="jbar"><i style="width:${x.pct * 100}%"></i></span>`).join('')}
         </button>
-        <button class="rs angry" data-act="end" data-id="rehire">
-          <b>홧김에 던진다</b><span>${ready ? '꿈이 눈앞인데… 그래도 홧김에?' : '아직 준비가 안 됐다. 그래도 던질래?'}</span>
+        <button class="rs angry" data-act="angry">
+          <b>홧김에 던진다</b><span>실패 퇴사. 꿈 도감에 안 남는다.</span>
         </button>
       </div>
+      <p class="muted">${ready ? '조건이 다 모였다. 이제 꿈 퇴사를 할 수 있다.' : `아직 조건 ${parts.length}개 중 ${parts.filter((x) => x.pct >= 1).length}개. 순자산은 현금+주식+원룸(대출 뺀 값)이야.`}</p>
       <p class="muted">꿈은 리포트의 "내 정보 고치기"에서 바꿀 수 있어.</p>
       <button class="btn ghost" data-act="close">서랍에 다시 넣는다</button>`);
+  }
+
+  function angry() {
+    sheet(`
+      <h3>정말 던질까?</h3>
+      <p>이건 <b>실패 퇴사</b>야. 모은 돈으로 버티다 다시 취업하는 엔딩으로 끝나고, 꿈 도감에는 남지 않아.</p>
+      <p class="muted">지금 ${esc(dreamName())}까지 ${Math.floor(goalPct() * 100)}%.</p>
+      <button class="btn danger" data-act="end" data-id="rehire" data-r="angry">그래도 던진다</button>
+      <button class="btn primary" data-act="close">아니, 참는다</button>`);
+  }
+
+  // ───────── 재테크 ─────────
+  function invest() {
+    if (!S || ['title', 'setup', 'ending'].includes(S.view.type)) return;
+    const L = T.INVEST.lines;
+    if (!stocksOpen()) {
+      sheet(`
+        <h3>재테크</h3>
+        <p>${esc(L.locked)}</p>
+        <ul class="checks"><li><span>비상금 (현금 ${C.emergencyMonths}개월치)</span><b>${man(Math.max(0, S.cash))} / ${man(emergencyNeed())}</b><em>${Math.floor(clamp(roadPct('emergency'), 0, 1) * 100)}%</em></li></ul>
+        <button class="btn primary" data-act="close">닫기</button>`);
+      return;
+    }
+    const spare = Math.max(0, Math.floor((S.cash - emergencyNeed()) / 100000) * 100000);
+    const stockRows = T.INVEST.stocks.map((x) => {
+      const val = stockVal(x.id), cost = S.inv.cost[x.id];
+      const gain = cost ? val / cost - 1 : 0;
+      return `
+      <div class="asset">
+        <div class="asset-h"><b>${esc(x.name)}</b><span>${Math.round(S.inv.price[x.id]).toLocaleString('ko-KR')} <em class="${S.inv.move[x.id] >= 0 ? 'up' : 'down'}">${pctS(S.inv.move[x.id])}</em></span></div>
+        <p class="muted">${esc(x.desc)}</p>
+        <p class="asset-v">보유 ${man(val)}${cost ? ` · 수익률 <em class="${gain >= 0 ? 'up' : 'down'}">${pctS(gain)}</em>` : ''}</p>
+        <div class="row4">
+          <button class="btn sm" data-act="buy" data-id="${x.id}" data-n="0" ${S.cash < lot(0) ? 'disabled' : ''}>${man(lot(0))} 사기</button>
+          <button class="btn sm" data-act="buy" data-id="${x.id}" data-n="1" ${S.cash < lot(1) ? 'disabled' : ''}>${man(lot(1))} 사기</button>
+          <button class="btn sm" data-act="buy" data-id="${x.id}" data-n="spare" ${spare <= 0 ? 'disabled' : ''}>비상금 빼고 전부</button>
+          <button class="btn sm" data-act="sell" data-id="${x.id}" data-n="0.5" ${val <= 0 ? 'disabled' : ''}>절반 팔기</button>
+          <button class="btn sm" data-act="sell" data-id="${x.id}" data-n="1" ${val <= 0 ? 'disabled' : ''}>전부 팔기</button>
+        </div>
+      </div>`;
+    }).join('');
+    const q = estateQuote();
+    const estateBlock = !estateOpen()
+      ? `<div class="asset locked"><div class="asset-h"><b>${esc(T.INVEST.estate.name)}</b><span>잠김</span></div><p class="muted">${esc(L.estateLocked)} 지금 ${Math.floor(clamp(roadPct('seed'), 0, 1) * 100)}% (계약금+세금 ${man(q.need)})</p></div>`
+      : `<div class="asset">
+          <div class="asset-h"><b>${esc(T.INVEST.estate.name)}</b><span>금리 ${S.inv.rate.toFixed(1)}%</span></div>
+          <p class="muted">${esc(T.INVEST.estate.desc)}</p>
+          ${S.inv.estates.map((e, i) => `
+            <p class="asset-v">${i + 1}호 · 시세 ${man(e.price)} · 대출 ${man(e.loan)} · 월 ${estateNet(e) >= 0 ? '+' : ''}${man(estateNet(e))}${e.selling != null ? ` · <b>매물로 내놓음 (${Math.max(0, e.selling - S.dayNo - 1)}일 뒤 팔림)</b>` : ''}</p>
+            ${e.selling == null ? `<button class="btn sm" data-act="estate-sell" data-i="${i}">중개소에 내놓기</button>` : ''}`).join('')}
+          ${S.inv.estates.length < IV.estate.max ? `
+            <p class="asset-v">새로 사기: 시세 ${man(q.price)} · 대출 ${Math.round(IV.estate.ltv * 100)}% · 월세 ${man(q.rent)} · 필요한 현금 ${man(q.need)}</p>
+            <button class="btn sm" data-act="estate-buy" ${S.cash < q.need ? 'disabled' : ''}>계약한다</button>` : ''}
+        </div>`;
+    sheet(`
+      <h3>재테크</h3>
+      <ul class="checks">
+        <li><span>현금</span><b>${man(S.cash)}</b><em class="${S.cash >= emergencyNeed() ? 'good' : 'bad'}">${S.cash >= emergencyNeed() ? '비상금 OK' : '비상금 부족'}</em></li>
+        <li><span>순자산</span><b>${man(netWorth())}</b><em></em></li>
+        <li><span>월 부수입 (부업+월세+배당)</span><b>${man(passive())}</b><em></em></li>
+      </ul>
+      ${stockRows}
+      ${estateBlock}
+      <p class="muted">주식 가격은 매일 밤 장이 닫힐 때 움직여. 수수료 ${(IV.fee * 100).toFixed(1)}%. ${esc(T.INVEST.disclaimer)}</p>
+      <button class="btn primary" data-act="close">닫기</button>`);
+  }
+  function investAct(a, b) {
+    const id = b.dataset.id;
+    let ok = false;
+    if (a === 'buy') {
+      const n = b.dataset.n;
+      const amt = n === 'spare' ? Math.max(0, Math.floor((S.cash - emergencyNeed()) / 100000) * 100000) : lot(+n);
+      ok = buyStock(id, amt);
+      if (ok) traitOf(null, id === 'theme');
+    } else if (a === 'sell') ok = sellStock(id, +b.dataset.n);
+    else if (a === 'estate-buy') ok = buyEstate();
+    else if (a === 'estate-sell') { const e = S.inv.estates[+b.dataset.i]; if (e) { e.selling = S.dayNo + IV.estate.sellDays; ok = true; toast(T.INVEST.lines.selling); } }
+    if (!ok) return;
+    sfx(a === 'sell' || a === 'estate-sell' ? 'coin' : 'good');
+    save(); hud(); invest(); checkRoad();
+  }
+
+  function roadSheet() {
+    sheet(`
+      <h3>퇴사 로드맵</h3>
+      <p class="muted">차례대로 하나씩 넘는다. 넘을 때마다 결재 도장과 작은 보상, 새 기능이 열린다.</p>
+      <ol class="road">${T.ROADMAP.map((r) => {
+        const done = road(r.id), cur = roadNext() === r;
+        return `<li class="${done ? 'done' : cur ? 'cur' : ''}"><b>${esc(r.title)}</b><span>${esc(r.desc)}</span>${r.unlock ? `<small>${esc(r.unlock.replace('열렸다.', '열린다'))}</small>` : ''}${cur ? `<span class="jbar"><i style="width:${Math.floor(clamp(roadPct(r.id), 0, 1) * 100)}%"></i></span>` : ''}</li>`;
+      }).join('')}</ol>
+      <button class="btn primary" data-act="close">닫기</button>`);
   }
 
   // ───────── 공유 ─────────
@@ -1071,7 +1348,11 @@
     else if (a === 'work-day') { startDay(); save(); render(); }
     else if (a === 'back') { S.view = { type: 'evening' }; save(); render(); }
     else if (a === 'resign') resign();
-    else if (a === 'end') ending(b.dataset.id);
+    else if (a === 'end') ending(b.dataset.id, b.dataset.r);
+    else if (a === 'angry') angry();
+    else if (a === 'invest') invest();
+    else if (a === 'road') roadSheet();
+    else if (['buy', 'sell', 'estate-buy', 'estate-sell'].includes(a)) investAct(a, b);
     else if (a === 'close') closeSheet();
     else if (a === 'share') share();
     else if (a === 'sound') { M.sound = M.sound === false; T.Sound.on = M.sound; saveMeta(); hud(); if (M.sound) sfx('good'); }
@@ -1132,7 +1413,7 @@
   }
 
   // 테스트용 (콘솔에서 TT.state() 등)
-  window.TT = { state: () => S, meta: () => M, events: EV, render: () => render(), pct: () => goalPct(), ready: () => dreamReady(), reset: () => { try { localStorage.removeItem(C.saveKey); } catch (e) { /* 무시 */ } location.reload(); } };
+  window.TT = { state: () => S, meta: () => M, events: EV, render: () => render(), pct: () => goalPct(), ready: () => dreamReady(), net: () => netWorth(), emergency: () => emergencyNeed(), quote: () => estateQuote(), buy: (id, amt) => { const r = buyStock(id, amt); save(); return r; }, sell: (id, part) => sellStock(id, part), buyEstate: () => buyEstate(), open: () => [stocksOpen(), estateOpen()], road: () => S.inv.road.slice(), reset: () => { try { localStorage.removeItem(C.saveKey); } catch (e) { /* 무시 */ } location.reload(); } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

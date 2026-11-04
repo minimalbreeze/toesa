@@ -1,4 +1,5 @@
-// 엔딩 3개. 사직서 버튼을 누를 때 조건을 본다.
+// 꿈 엔딩은 dreams.js에 있다. 여기는 예전 엔딩과 실패 퇴사(rehire).
+// rehire는 실패 퇴사다: 홧김에 던진 사직서(angry), 멘탈 0(burnout), 평가 경고 누적(fired). 꿈 도감에는 안 남는다.
 //   freedom: 현금이 CONFIG.freedomGoal 이상
 //   boss:    부업 하나가 CONFIG.maxSideLevel
 //   rehire:  조건 없이 던진 사직서, 멘탈 0 (burnout), 평가 경고 누적 (fired)

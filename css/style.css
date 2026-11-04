@@ -336,3 +336,44 @@ html.standalone #app {
   #card { padding: 12px; gap: 8px; }
   .choice { padding: 8px 10px; }
 }
+
+/* ── 퇴사 로드맵 · 재테크 ── */
+#h-road {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; width: 100%;
+  background: var(--night-hi); border: 2px solid var(--on-night-muted); color: var(--on-night);
+  padding: 4px 8px; font-size: 12px; text-align: left; cursor: pointer;
+}
+#h-road[hidden] { display: none; }
+#h-road span { color: var(--gold); white-space: nowrap; }
+#h-road b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#h-road em { font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+#btn-invest { border: 2px solid var(--gold); color: var(--gold); background: transparent; font-size: 13px; padding: 6px 8px; cursor: pointer; }
+#btn-invest.locked { border-color: var(--on-night-muted); color: var(--on-night-muted); }
+#btn-invest:disabled { opacity: .3; cursor: default; }
+.checks em:empty { display: none; }
+.up { color: var(--money); font-style: normal; }
+.down { color: var(--mind); font-style: normal; }
+.asset { border: 2px solid var(--ink); background: var(--paper-hi); padding: 8px 10px; display: grid; gap: 6px; }
+.asset.locked { opacity: .7; border-style: dashed; }
+.asset p { margin: 0; }
+.asset-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.asset-h span { font-variant-numeric: tabular-nums; font-size: 13px; }
+.asset-v { font-size: 13px; font-variant-numeric: tabular-nums; }
+.row4 { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn.sm { padding: 6px 8px; font-size: 12px; box-shadow: 1px 1px 0 var(--ink); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.danger { background: var(--stamp); color: var(--paper-hi); }
+.market { border: 2px solid var(--ink); background: var(--paper-hi); padding: 8px 10px; display: grid; gap: 4px; font-size: 13px; }
+.market b { font-size: 12px; letter-spacing: 2px; }
+.market p { margin: 0; }
+.stamp-label.fail { background: var(--ink); }
+.stamp-big { justify-self: center; border: 4px solid var(--stamp); color: var(--stamp); font-size: 22px; font-weight: 700; padding: 4px 14px; transform: rotate(-8deg); letter-spacing: 6px; }
+.unlock { margin: 0; padding: 6px 10px; background: var(--ink); color: var(--gold); font-weight: 700; font-size: 14px; }
+.road { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: r; }
+.road li { counter-increment: r; display: grid; gap: 2px; padding: 6px 8px 6px 34px; border: 2px solid #b5aea0; position: relative; font-size: 13px; }
+.road li::before { content: counter(r); position: absolute; left: 8px; top: 6px; width: 18px; height: 18px; border: 2px solid currentColor; text-align: center; line-height: 16px; font-size: 11px; }
+.road li span { color: var(--muted); }
+.road li small { color: #8a5d00; }
+.road li.done { border-color: var(--money); }
+.road li.done::before { content: '✓'; color: var(--money); }
+.road li.cur { border-color: var(--ink); background: var(--paper-hi); }

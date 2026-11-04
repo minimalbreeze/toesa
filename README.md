@@ -15,7 +15,8 @@
 | `js/data/stories.js` | 며칠에 걸쳐 이어지는 연재 이야기 8편 |
 | `js/data/report.js` | 내 회사생활 리포트·근무 일지 문장 |
 | `js/data/sidejobs.js` | 부업 3종과 레벨업 문구 |
-| `js/data/endings.js` | 엔딩 3개 |
+| `js/data/endings.js` | 실패 퇴사(재취업) 엔딩 |
+| `js/data/invest.js` | 재테크(주식·원룸) 사건과 문장, 퇴사 로드맵 6단계 |
 | `js/data/config.js` | 밸런스 숫자 전부 (월급, 생활비, 퇴사 조건…) |
 | `js/sprites.js` | 픽셀 그림 (캐릭터는 글자 격자, 장면 11개) |
 | `js/sound.js` | 효과음 (Web Audio, 파일 없음) |
