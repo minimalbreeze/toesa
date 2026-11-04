@@ -17,6 +17,8 @@
 | `js/data/sidejobs.js` | 부업 3종과 레벨업 문구 |
 | `js/data/endings.js` | 실패 퇴사(재취업) 엔딩 |
 | `js/data/life.js` | 생활비(주거·고정지출·출퇴근·주말)와 차, 시작 난이도 |
+| `js/data/cinema.js` | 엔딩 영상 컷·자막·에필로그·스태프 롤 |
+| `js/data/achievements.js` | 업적 18개 |
 | `js/data/invest.js` | 재테크(주식·원룸) 사건과 문장, 퇴사 로드맵 6단계 |
 | `js/data/config.js` | 밸런스 숫자 전부 (월급, 생활비, 퇴사 조건…) |
 | `js/sprites.js` | 픽셀 그림 (캐릭터는 글자 격자, 장면 11개) |

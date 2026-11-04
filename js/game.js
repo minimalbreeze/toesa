@@ -62,6 +62,7 @@
       scale, livingBase: sp.other,
       lifeV: 1, car: sp.car ? sp.car.id : null, tax: newTax(), monthSpend: { commute: 0, weekend: 0 },
       housing: sp.H.id, rent: sp.rent, deposit: sp.H.deposit || 0, commuteMode: sp.CM.id,
+      diffLv: T.LIFE.difficulty.indexOf(sp.diff), stats: newStats(),
       goal: Math.max(5e7, Math.round(C.freedomGoal * ratio / 1e7) * 1e7),
       ratio, inv: newInv(),
       traits: {}, dayLog: [],
@@ -87,6 +88,8 @@
 
   // 세금: 1년(게임 12개월) 동안 쌓인 부업·월세 소득과 미리 뗀 세금
   function newTax() { return { side: 0, rent: 0, withheld: 0 }; }
+  // 업적용 기록
+  function newStats() { return { collapse: 0, beer: 0, weekend: {}, themeBest: 0, estatesMax: 0 }; }
 
   // 1차 버전 저장을 이어서 쓸 수 있게 새로 생긴 칸을 채운다
   function migrate(s) {
@@ -97,6 +100,7 @@
     if (!s.dayLog) s.dayLog = [];
     if (s.dayNo == null) { s.dayNo = (s.month - 1) * C.daysPerMonth + s.day; s.story = null; s.storiesDone = []; s.storyRest = 0; }
     if (!s.inv) { s.inv = newInv(); s.ratio = s.ratio || 1; }
+    if (!s.stats) { s.stats = newStats(); s.diffLv = 1; }
     // 생활비를 고정지출 + 출근·주말 지출로 나눴다. 예전 생활비에서 새로 따로 나가는 몫을 뺀다.
     if (!s.lifeV) {
       s.lifeV = 1; s.car = null; s.tax = newTax(); s.monthSpend = { commute: 0, weekend: 0 };
@@ -270,7 +274,10 @@
   function sellStock(id, part) {
     const u = S.inv.units[id] * part;
     if (u <= 0) return false;
-    S.cash += u * S.inv.price[id] * (1 - IV.fee);
+    const got = u * S.inv.price[id] * (1 - IV.fee);
+    const paid = S.inv.cost[id] * part;
+    if (id === 'theme' && paid > 0) S.stats.themeBest = Math.max(S.stats.themeBest, got / paid - 1);
+    S.cash += got;
     S.inv.cost[id] *= 1 - part;
     S.inv.units[id] -= u;
     return true;
@@ -281,6 +288,7 @@
     if (S.cash < q.need) { toast(T.INVEST.lines.noCash + ` 계약금과 세금 ${man(q.need)}이 필요해.`); return false; }
     S.cash -= q.need;
     S.inv.estates.push({ price: q.price, loan: q.loan, rent: q.rent, paid: q.need, buy: q.price, month: S.month, selling: null });
+    S.stats.estatesMax = Math.max(S.stats.estatesMax, S.inv.estates.length);
     return true;
   }
 
@@ -651,6 +659,7 @@
   }
 
   function collapse() {
+    S.stats.collapse++;
     S.hp = C.collapse.hp;
     const d = apply({ mental: C.collapse.mental, cash: C.collapse.cash, eval: C.collapse.eval });
     S.phase = T.PHASES.length - 1;
@@ -693,6 +702,7 @@
       : '친구랑 치킨에 맥주. 회사 욕을 실컷 했다. 내일 일은 내일의 내가 하겠지.';
     if (sh.twist) text += '\n' + rnd(C.luck.twistLines);
     traitOf(C.evening[kind].fx, false);
+    if (kind === 'beer') S.stats.beer++;
     log(kind === 'rest' ? '집에서 뻗었다' : '친구랑 치맥', d.list, sh.twist);
     S.view = { type: 'result', text, picked: kind === 'rest' ? '집에서 뻗는다' : '친구랑 치맥', deltas: d.list, ups: [], twist: sh.twist, after: 'night', scene: { scene: 'home', mode: kind } };
     sfx(sh.twist ? 'twist' : 'good');
@@ -705,6 +715,7 @@
     const sh = shake(w.fx);
     const d = apply(sh.fx);
     S.monthSpend.weekend += -(sh.fx.cash || 0);
+    S.stats.weekend[id] = (S.stats.weekend[id] || 0) + 1;
     traitOf(w.fx, false);
     let text = w.text;
     if (sh.twist) text += '\n' + rnd(C.luck.twistLines);
@@ -802,15 +813,46 @@
     if (slip.promoted) setTimeout(() => sfx('level'), 400);
   }
 
+  // 엔딩 등급: 출근 일수에 시작 난이도 배율을 곱해 꿈의 par와 비교한다
+  function gradeOf(dreamId, days) {
+    const par = DREAM[dreamId] && DREAM[dreamId].par;
+    if (!par) return '';
+    const eff = days * (C.grade.diff[S.diffLv] || 1);
+    return eff <= par[0] ? 'S' : eff <= par[1] ? 'A' : eff <= par[2] ? 'B' : 'C';
+  }
+  const GRADE_ORDER = ['S', 'A', 'B', 'C'];
+
   function ending(id, reason) {
     M.endings = M.endings || {};
     const key = id === 'dream' ? 'dream:' + dream().id : id;
     M.endings[key] = (M.endings[key] || 0) + 1;
+    const days = S.dayNo + 1;
+    const failed = id === 'rehire';
+    const grade = failed ? '' : gradeOf(dream().id, days);
+    // 꿈마다 최고 등급·최단 기록
+    let record = null;
+    if (!failed) {
+      M.records = M.records || {};
+      const old = M.records[dream().id];
+      const better = !old || (grade && (!old.grade || GRADE_ORDER.indexOf(grade) < GRADE_ORDER.indexOf(old.grade)));
+      const faster = !old || days < old.best;
+      M.records[dream().id] = { best: faster ? days : old.best, grade: better ? grade : old.grade };
+      record = { newBest: !!old && faster, newGrade: !!old && better && !!grade };
+    }
+    // 업적
+    M.ach = M.ach || {};
+    const x = {
+      dream: dream().id, failed, reason: failed ? (reason || 'angry') : '', grade, diffLv: S.diffLv, days, rank: S.rank, car: !!S.car,
+      estates: S.inv.estates.length, stats: S.stats, housing: S.housing, endings: T.DREAMS.filter((d) => M.endings['dream:' + d.id]).length,
+    };
+    const newAch = T.ACHIEVEMENTS.filter((a) => !M.ach[a.id] && a.when(x)).map((a) => a.id);
+    newAch.forEach((aid) => { M.ach[aid] = today(); });
     saveMeta();
     closeSheet();
-    S.view = { type: 'ending', id, reason: reason || '', dream: dream().id, dreamName: dreamName() };
-    sfx('stamp'); setTimeout(() => sfx('ending'), 250);
+    S.view = { type: 'ending', id, reason: reason || '', dream: dream().id, dreamName: dreamName(), days, grade, record, newAch, played: false };
+    sfx('stamp');
     save(); render();
+    movie();
   }
 
   // ───────── 꺼 둔 사이 부업 수입 ─────────
@@ -971,6 +1013,7 @@
         <p class="muted">그 꿈을 위해 회사를 버틸지, 벗어날지. 매일의 선택이 결말을 바꾼다. 다만 회사는 마음대로 되는 게 하나도 없다.</p>
         <button class="btn primary" data-act="setup">내 회사로 입사하기</button>
         <button class="btn" data-act="start">그냥 입사하기</button>
+        ${M.endings && Object.keys(M.endings).length ? `<button class="btn ghost" data-act="dex">꿈 도감 ${T.DREAMS.filter((d) => M.endings['dream:' + d.id]).length}/${T.DREAMS.length} · 업적 ${T.ACHIEVEMENTS.filter((a) => (M.ach || {})[a.id]).length}/${T.ACHIEVEMENTS.length}</button>` : `<button class="btn ghost" data-act="dex">도감·업적 보기</button>`}
         <p class="muted">"내 회사로"를 고르면 회사·부서·연차·직급·월급과 <b>퇴사하고 하고 싶은 것</b>을 정하고 시작해. "그냥 입사하기"는 꿈이 "1년 쉬기"로 정해져.</p>`;
     } else if (v.type === 'setup') {
       html = `<div class="who">입사 서류</div>${profileForm()}
@@ -1087,19 +1130,25 @@
       html = `
         <div class="who stamp-label${failed ? ' fail' : ''}">${failed ? '실패 퇴사' : '사직서 수리됨'}</div>
         <h2 class="ending-title">${e.title}</h2>
+        ${v.grade ? `<div class="grade-row"><span class="grade g${v.grade}">${v.grade}</span><span>출근 ${v.days}일 · ${esc((T.LIFE.difficulty[S.diffLv] || T.LIFE.difficulty[1]).name)} 시작${v.record && v.record.newBest ? ' · 최단 기록!' : ''}</span></div>` : ''}
         <p class="line">${esc(v.reason === 'burnout' ? e.burnoutLine : v.reason === 'fired' ? e.firedLine : e.line)}</p>
         ${e.body.map((b) => `<p class="text">${esc(fmt(b))}</p>`).join('')}
         <div class="summary">
           <span>${esc(company())}</span><span>출근 ${S.dayNo + 1}일</span><span>입사 ${S.month}개월</span><span>${C.ranks[S.rank].name}</span><span>순자산 ${man(netWorth())}</span><span>${JOB[best].name} Lv.${S.side[best].lvl}</span>
         </div>
         <div class="dex"><b>꿈 도감 ${dex.filter((x) => got[x.key]).length}/${dex.length}</b>
-          ${dex.map((x) => `<span class="${got[x.key] ? 'got' : ''}">${got[x.key] ? x.label : '???'}</span>`).join('')}
+          ${dex.map((x) => { const r = (M.records || {})[x.key.slice(6)]; return `<span class="${got[x.key] ? 'got' : ''}">${got[x.key] ? x.label + (r && r.grade ? ' ' + r.grade : '') : '???'}</span>`; }).join('')}
         </div>
+        ${(v.newAch || []).length ? `<div class="new-ach">${v.newAch.map((id) => { const a = T.ACHIEVEMENTS.find((z) => z.id === id); return a ? `<p class="levelup"><b>업적 달성</b> ${esc(a.name)}</p>` : ''; }).join('')}</div>` : ''}
         ${got.rehire ? `<p class="muted">실패 퇴사 ${got.rehire}번</p>` : ''}
         <p class="muted">${esc(T.DREAM_NOTE.season(S.dayNo + 1, T.DREAMS.filter((d) => !got['dream:' + d.id]).length, failed))}</p>
         <div class="row">
           <button class="btn" data-act="share">결과 공유하기</button>
           <button class="btn primary" data-act="restart">다음 시즌 입사</button>
+        </div>
+        <div class="row">
+          <button class="btn" data-act="movie">영상 다시 보기</button>
+          <button class="btn" data-act="dex">도감·업적</button>
         </div>
         <button class="btn" data-act="report">이번 회사생활 리포트 보기</button>`;
     }
@@ -1471,6 +1520,122 @@
       <button class="btn primary" data-act="close">닫기</button>`);
   }
 
+  // ───────── 엔딩 영상 ─────────
+  // 컷을 차례로 보여 준다. 화면을 누르면 다음 컷, "건너뛰기"는 끝으로.
+  let MV = null;
+  function movieText(t) {
+    const v = S.view;
+    return fmt(t).replace(/\{직급\}/g, C.ranks[S.rank].name).replace(/\{출근\}/g, v.days || S.dayNo + 1)
+      .replace(/\{순자산\}/g, man(netWorth())).replace(/\{원룸\}/g, S.inv.estates.length).replace(/\{차\}/g, carOf() ? carOf().name : '차');
+  }
+  function movieCuts(v) {
+    const CI = T.CINEMA, e = endingOf(v);
+    const cuts = [];
+    if (v.id === 'rehire') {
+      const r = v.reason === 'burnout' || v.reason === 'fired' ? v.reason : 'angry';
+      const first = r === 'burnout' ? e.burnoutLine : r === 'fired' ? e.firedLine : e.line;
+      CI.fail[r].forEach((sc, i) => cuts.push({ scene: sc, text: i ? '상자 하나 들고 나왔다. 꿈은 아직 상자 안에 있다.' : first }));
+      CI.fail.after.forEach((sc, i) => cuts.push({ scene: sc, text: e.body[i] || '' }));
+      cuts.push({ scene: { scene: 'elevator', who: 'boss' }, title: e.title, text: '실패 퇴사. 꿈 도감에는 남지 않는다.' });
+    } else {
+      CI.intro.forEach((c) => cuts.push({ scene: c.scene, text: c.text }));
+      const sc = CI.dreams[v.dream] || CI.dreams.custom;
+      e.body.forEach((line, i) => cuts.push({ scene: sc[i] || sc[sc.length - 1], text: line }));
+      cuts.push({ scene: { scene: e.scene === 'office' ? 'elevator' : e.scene, sunset: true, mode: e.scene === 'home' ? 'rest' : undefined, cafe: v.dream === 'cafe' }, title: e.title, text: e.line });
+      const xx = { rank: S.rank, car: !!S.car, estates: S.inv.estates.length, collapse: S.stats.collapse, housing: S.housing, themeBest: S.stats.themeBest };
+      CI.epilogues.filter((ep) => ep.when(S, xx)).slice(0, 2).forEach((ep) => cuts.push({ scene: ep.scene, text: ep.text }));
+      const { r } = reportData();
+      cuts.push({ scene: { scene: 'beach', sunset: true }, text: CI.persona[r.persona] || CI.persona.balanced });
+    }
+    cuts.push({ credits: true, scene: { scene: 'fireworks' } });
+    cuts.push({ record: true, scene: { scene: 'fireworks' } });
+    cuts.push({ end: true, scene: { scene: v.id === 'rehire' ? 'elevator' : 'fireworks', who: v.id === 'rehire' ? 'boss' : undefined }, title: v.id === 'rehire' ? CI.failEnd : CI.theEnd });
+    return cuts;
+  }
+  function movie() {
+    const v = S.view;
+    if (!v || v.type !== 'ending') return;
+    const el = $('#movie');
+    if (!el) return;
+    MV = { cuts: movieCuts(v), i: -1, frame: 0, timer: 0, typer: 0, ctx: $('#mv-canvas').getContext('2d') };
+    MV.ctx.imageSmoothingEnabled = false;
+    el.hidden = false;
+    document.body.classList.add('movie-on');
+    if (T.Sound) T.Sound.music(v.id === 'rehire' ? 'fail' : 'dream');
+    clearInterval(MV.anim);
+    MV.anim = setInterval(() => { if (!MV) return; MV.frame++; drawCut(); }, 170);
+    nextCut();
+  }
+  function drawCut() {
+    const c = MV.cuts[MV.i];
+    if (c) T.Sprites.draw(MV.ctx, Object.assign({ frame: MV.frame }, c.scene));
+  }
+  function nextCut() {
+    if (!MV) return;
+    clearTimeout(MV.timer); clearInterval(MV.typer);
+    MV.i++;
+    if (MV.i >= MV.cuts.length) return endMovie();
+    const c = MV.cuts[MV.i], v = S.view;
+    MV.frame = 0;
+    drawCut();
+    const tx = $('#mv-text'), ti = $('#mv-title'), box = $('#mv-credits');
+    box.hidden = true; box.innerHTML = ''; ti.textContent = ''; tx.textContent = '';
+    let ms = 3200;
+    if (c.credits) {
+      box.hidden = false;
+      box.innerHTML = `<div class="roll">${T.CINEMA.credits.map(([k, val]) => `<p><span>${esc(k)}</span><b>${esc(movieText(val))}</b></p>`).join('')}</div>`;
+      ms = 6500;
+    } else if (c.record) {
+      box.hidden = false;
+      const ach = (v.newAch || []).map((id) => T.ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean);
+      box.innerHTML = `
+        <div class="rec">
+          ${v.grade ? `<div class="grade g${v.grade}">${v.grade}</div>` : ''}
+          <p><span>꿈</span><b>${esc(v.id === 'rehire' ? '실패 퇴사' : v.dreamName)}</b></p>
+          <p><span>출근</span><b>${v.days}일</b></p>
+          <p><span>시작 난이도</span><b>${esc((T.LIFE.difficulty[S.diffLv] || T.LIFE.difficulty[1]).stars + ' ' + (T.LIFE.difficulty[S.diffLv] || T.LIFE.difficulty[1]).name)}</b></p>
+          <p><span>순자산</span><b>${man(netWorth())}</b></p>
+          ${v.record && v.record.newBest ? '<p class="new">최단 기록 경신!</p>' : ''}
+          ${ach.map((a) => `<p class="new">업적 달성 · ${esc(a.name)}</p>`).join('')}
+        </div>`;
+      ms = 5000 + ach.length * 600;
+      if (v.grade || ach.length) sfx('level');
+    } else {
+      if (c.title) { ti.textContent = c.title; sfx('stamp'); }
+      const full = c.text ? movieText(c.text) : '';
+      let n = 0;
+      MV.typer = setInterval(() => { n += 2; tx.textContent = full.slice(0, n); if (n >= full.length) clearInterval(MV.typer); }, 45);
+      ms = Math.max(c.end ? 4000 : 3000, 1400 + full.length * 70);
+    }
+    $('#mv-skip').textContent = MV.i === MV.cuts.length - 1 ? '닫기 ›' : '건너뛰기 ›';
+    MV.timer = setTimeout(nextCut, ms);
+  }
+  function endMovie() {
+    if (!MV) return;
+    clearTimeout(MV.timer); clearInterval(MV.typer); clearInterval(MV.anim);
+    MV = null;
+    $('#movie').hidden = true;
+    document.body.classList.remove('movie-on');
+    if (T.Sound) T.Sound.stopMusic();
+    if (S.view.type === 'ending') { S.view.played = true; save(); }
+  }
+
+  // ───────── 도감·업적 ─────────
+  function dexSheet() {
+    const got = M.endings || {}, rec = M.records || {}, ach = M.ach || {};
+    sheet(`
+      <h3>꿈 도감</h3>
+      <p class="muted">꿈마다 최고 등급과 최단 출근 일수가 남는다. 등급은 출근 일수와 시작 난이도로 정해진다.</p>
+      <ul class="checks">${T.DREAMS.map((d) => {
+        const r = rec[d.id];
+        return `<li><span>${got['dream:' + d.id] ? esc(d.name) : '???'}</span><b>${r ? r.best + '일' : '-'}</b><em class="${r && r.grade === 'S' ? 'good' : ''}">${r && r.grade ? r.grade : r ? '기록' : '미달성'}</em></li>`;
+      }).join('')}</ul>
+      <h3>업적 ${T.ACHIEVEMENTS.filter((a) => ach[a.id]).length}/${T.ACHIEVEMENTS.length}</h3>
+      <ul class="achs">${T.ACHIEVEMENTS.map((a) => `<li class="${ach[a.id] ? 'got' : ''}"><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></li>`).join('')}</ul>
+      <p class="muted">실패 퇴사 ${got.rehire || 0}번</p>
+      <button class="btn primary" data-act="close">닫기</button>`);
+  }
+
   // ───────── 공유 ─────────
   async function share() {
     const e = endingOf(S.view);
@@ -1525,6 +1690,10 @@
     else if (a === 'resign') resign();
     else if (a === 'end') ending(b.dataset.id, b.dataset.r);
     else if (a === 'angry') angry();
+    else if (a === 'movie') movie();
+    else if (a === 'dex') dexSheet();
+    else if (a === 'mv-skip') { if (MV && MV.i < MV.cuts.length - 1) { MV.i = MV.cuts.length - 2; nextCut(); } else endMovie(); }
+    else if (a === 'mv-next') nextCut();
     else if (a === 'weekend') weekend(b.dataset.id);
     else if (a === 'car') carSheet();
     else if (a === 'buy-car') buyCar(b.dataset.id);
@@ -1538,6 +1707,7 @@
   }
 
   function onKey(e) {
+    if (MV) { if (e.key === 'Escape') endMovie(); else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nextCut(); } return; }
     if (!$('#overlay').hidden) { if (e.key === 'Escape') closeSheet(); return; }
     if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
     const v = S.view.type;
@@ -1586,6 +1756,7 @@
     } else {
       migrate(S);
       render();
+      if (S.view.type === 'ending' && S.view.played === false) movie();
       checkAttendance();
       offline();
     }
