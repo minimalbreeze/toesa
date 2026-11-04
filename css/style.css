@@ -377,3 +377,6 @@ html.standalone #app {
 .road li.done { border-color: var(--money); }
 .road li.done::before { content: '✓'; color: var(--money); }
 .road li.cur { border-color: var(--ink); background: var(--paper-hi); }
+.diff { display: grid; gap: 2px; padding: 8px 10px; background: var(--ink); color: var(--paper-hi); }
+.diff b { color: var(--gold); }
+.diff span { font-size: 13px; }

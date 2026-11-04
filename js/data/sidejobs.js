@@ -1,6 +1,6 @@
 // 부업 3종. 퇴근 후 "부업을 한다"를 고르면 진도가 1 오른다.
 // Lv.n → Lv.n+1 에는 진도 (n+1) × CONFIG.sideNeed 가 필요하다.
-// 시급 = rate × Lv^exp (앱을 꺼 둬도 최대 8시간치 쌓인다)
+// 시급 = rate × Lv^exp. 하루를 보내면 config.js의 dayIncomeHours만큼 번다 (앱을 꺼 둔다고 쌓이지 않는다). 3.3%를 먼저 뗀다.
 // levelCost: 레벨업할 때마다 드는 돈 (쇼핑몰 재고비). 돈이 모자라면 레벨이 안 오른다.
 // fails: 부업을 했는데 아무 진전이 없을 때 나오는 문구 (확률은 config.js의 sideFail)
 
