@@ -20,7 +20,7 @@ Certificates, Identifiers & Profiles → Identifiers → **+** → App IDs → A
 ## 2. 앱 만들기 (appstoreconnect.apple.com)
 앱 → **+** → 새로운 앱
 - 플랫폼: iOS
-- 이름: `퇴사할게요` (이미 있는 이름이면 `퇴사할게요 : 오늘도 버텼다`로)
+- 이름: `퇴사할게요 : 오늘도 버텼다` ("퇴사할게요"는 이미 다른 앱이 쓰고 있다. 홈 화면 아이콘 이름은 그대로 "퇴사할게요")
 - 기본 언어: 한국어
 - 번들 ID: `com.minimalbreeze.toesa`
 - SKU: `toesa-001`
@@ -55,7 +55,16 @@ Get-Content -Raw "$HOME\Downloads\AuthKey_키ID.p8" | gh secret set ASC_KEY_P8 -
 ```
 비밀값은 GitHub에 암호화돼서 저장되고, 공개 리포여도 다른 사람은 볼 수 없다.
 
-## 5. 빌드하고 올리기 (맥 터미널·파워셸 같음)
+## 5-B. 맥에서 Xcode로 직접 올리기 (비밀값 없이, 1.0은 이렇게 올렸다)
+```zsh
+cd ~/toesa && git pull && npm ci && npm run build && npx cap sync ios
+open ios/App/App.xcodeproj
+```
+- Signing & Capabilities → Team 고르기 → 맨 위 기기 `Any iOS Device (arm64)` → Product → Archive → Distribute App → App Store Connect
+- 새 버전은 General 탭의 Version(예: 1.0.1)이나 Build 번호를 올린 뒤 Archive 한다
+- codesign이 키체인 비밀번호를 계속 물으면 한 번만: `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db` (맥 비밀번호, 영어 입력으로)
+
+## 5. 빌드하고 올리기 (GitHub Actions, 비밀값 4개가 있을 때)
 ```
 gh workflow run ios-testflight.yml -R minimalbreeze/toesa -f version=1.0.0
 gh run watch -R minimalbreeze/toesa
