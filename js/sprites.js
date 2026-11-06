@@ -251,6 +251,13 @@
     else { rect(ctx, 61, 48, 1, 2, '#ffffff'); rect(ctx, 60, 46, 1, 2, '#ffffff'); }
     }
 
+    // 엔딩 영상: 책상 위 사직서, 대표 명패
+    if (o.prop === 'resign') {
+      rect(ctx, 42, 49, 15, 9, PAL.k); rect(ctx, 43, 50, 13, 7, '#fbfaf5'); rect(ctx, 43, 50, 13, 2, '#d9432f');
+      rect(ctx, 45, 53, 9, 1, '#9b93a5'); rect(ctx, 45, 55, 6, 1, '#9b93a5');
+    }
+    if (o.prop === 'ceo') { rect(ctx, 40, 52, 16, 5, PAL.k); rect(ctx, 41, 53, 14, 3, '#f2b84b'); rect(ctx, 44, 54, 8, 1, PAL.k); }
+    if (o.bossShock && f % 4 < 3) { rect(ctx, 93, 38, 2, 6, PAL.k); rect(ctx, 93, 45, 2, 2, PAL.k); }
     if (o.prop === 'cake') {
       rect(ctx, 44, 49, 12, 7, PAL.k); rect(ctx, 45, 50, 10, 5, '#fbfaf5'); rect(ctx, 45, 52, 10, 1, '#ffb3c1');
       rect(ctx, 49, 46, 1, 3, '#ffe27a'); if (f % 2) rect(ctx, 49, 45, 1, 1, '#ff9e6d');
@@ -321,11 +328,13 @@
     }
   }
 
-  function beach(ctx, f) {
-    rect(ctx, 0, 0, W, 40, '#8fd3ff');
-    rect(ctx, 0, 24, W, 16, '#bfe8ff');
-    rect(ctx, 90, 8, 10, 10, '#ffe27a');
-    rect(ctx, 0, 40, W, 16, '#3fa7d6');
+  function beach(ctx, f, o) {
+    const sun = o && o.sunset;
+    rect(ctx, 0, 0, W, 40, sun ? '#6b4b8f' : '#8fd3ff');
+    rect(ctx, 0, 24, W, 16, sun ? '#ff9e6d' : '#bfe8ff');
+    if (sun) { rect(ctx, 0, 34, W, 6, '#ffc67a'); rect(ctx, 52, 30 + Math.min(Math.floor(f / 4), 8), 16, 10, '#ffe27a'); }
+    else rect(ctx, 90, 8, 10, 10, '#ffe27a');
+    rect(ctx, 0, 40, W, 16, sun ? '#c2607a' : '#3fa7d6');
     for (let i = 0; i < 6; i++) rect(ctx, ((i * 23 + f * 2) % (W + 10)) - 10, 44 + (i % 3) * 4, 8, 1, '#bfe8ff');
     rect(ctx, 0, 56, W, H - 56, '#f2d59b');
     for (let i = 0; i < 12; i++) rect(ctx, (i * 37) % W, 60 + (i * 7) % 20, 1, 1, '#d9b877');
@@ -353,7 +362,7 @@
     rect(ctx, 52, 41 + (Math.floor(f / 3) % 2), 20, 2, '#e3c08b'); rect(ctx, 56, 38 + (Math.floor(f / 3) % 2), 12, 3, '#e3c08b');
   }
 
-  function shop(ctx, f) {
+  function shop(ctx, f, o) {
     rect(ctx, 0, 0, W, H, '#cfe6f0');
     rect(ctx, 10, 14, 100, 52, '#fbfaf5');
     rect(ctx, 10, 14, 100, 1, PAL.k);
@@ -367,6 +376,39 @@
     rect(ctx, 0, 66, W, 1, PAL.k);
     person(ctx, 'player', 52, 47, f, {});
     if (f % 8 < 4) rect(ctx, 70, 44, 3, 3, '#f2b84b');
+    if (o && o.cafe) {
+      rect(ctx, 36, 58, 48, 3, PAL.k); rect(ctx, 37, 58, 46, 2, '#94653f');
+      rect(ctx, 44, 52, 7, 6, PAL.k); rect(ctx, 45, 53, 5, 4, '#fbfaf5'); rect(ctx, 51, 54, 1, 2, PAL.k);
+      const st = f % 4 < 2 ? 0 : 1; rect(ctx, 46 + st, 48, 1, 3, '#ffffff'); rect(ctx, 48 - st, 47, 1, 3, '#ffffff');
+    }
+  }
+
+  // 엔딩 영상: 활주로 위로 비행기가 지나간다
+  function airport(ctx, f) {
+    rect(ctx, 0, 0, W, 54, '#8fcfff'); rect(ctx, 0, 34, W, 20, '#c9ebff');
+    for (let i = 0; i < 3; i++) { const cx = (i * 47 + f) % (W + 30) - 20; rect(ctx, cx, 10 + i * 7, 18, 4, '#fbfaf5'); rect(ctx, cx + 4, 7 + i * 7, 9, 3, '#fbfaf5'); }
+    rect(ctx, 0, 54, W, H - 54, '#7c8494'); rect(ctx, 0, 54, W, 2, '#5f6675');
+    for (let x = 2; x < W; x += 16) rect(ctx, x, 66, 8, 1, '#fbfaf5');
+    const px = -40 + f * 4, py = 40 - Math.max(0, f - 12) * 2;
+    rect(ctx, px, py, 34, 6, PAL.k); rect(ctx, px + 1, py + 1, 32, 4, '#fbfaf5'); rect(ctx, px + 30, py - 6, 4, 6, '#5b7cfa');
+    rect(ctx, px + 10, py + 4, 12, 3, '#9b93a5'); for (let i = 0; i < 5; i++) rect(ctx, px + 6 + i * 5, py + 2, 2, 1, '#5b7cfa');
+    person(ctx, 'player', 10, 46, f, { shades: true });
+  }
+
+  // 엔딩 영상 마지막: 밤하늘 불꽃
+  function fireworks(ctx, f) {
+    rect(ctx, 0, 0, W, H, '#14122a');
+    for (let i = 0; i < 18; i++) rect(ctx, (i * 41) % W, (i * 23) % 50, 1, 1, i % 3 ? '#8b85a8' : '#fbfaf5');
+    [[0, 22], [18, 30], [40, 18], [62, 34], [84, 24], [104, 30]].forEach(([bx, h]) => rect(ctx, bx, 84 - h, 16, h, '#25213d'));
+    const bursts = [[30, 22, '#ffe27a'], [86, 18, '#7fd6c2'], [58, 30, '#f2b84b'], [20, 36, '#5b7cfa']];
+    bursts.forEach(([cx, cy, c], i) => {
+      const t = (f + i * 5) % 20;
+      if (t < 4) { rect(ctx, cx, 60 - t * 8, 1, 3, c); return; }
+      const r = t - 4;
+      if (r > 10) return;
+      for (let a = 0; a < 8; a++) { const ang = a * Math.PI / 4; rect(ctx, Math.round(cx + Math.cos(ang) * r), Math.round(cy + Math.sin(ang) * r), 1, 1, c); }
+    });
+    person(ctx, 'player', 52, 62, f, {});
   }
 
   function speaker(ctx, who, f) {
@@ -554,7 +596,9 @@
     rect(ctx, 0, 50, W, 14, '#b9b2a6'); for (let x = 0; x < W; x += 10) rect(ctx, x, 50, 1, 14, '#a39c90');
     rect(ctx, 0, 64, W, H - 64, '#55505e'); for (let x = 4; x < W; x += 20) rect(ctx, x, 73, 10, 1, '#fbfaf5');
     rect(ctx, 100, 22, 2, 42, PAL.k); rect(ctx, 96, 20, 10, 3, PAL.k); rect(ctx, 97, 23, 8, 1, '#ffe27a');
-    person(ctx, 'player', 30, 44, f, { face: o.face });
+    const px = o.walk ? 6 + Math.min(f * 3, 92) : 30;
+    person(ctx, 'player', px, 44, f, { face: o.face });
+    if (o.box) { rect(ctx, px + 9, 52, 10, 8, PAL.k); rect(ctx, px + 10, 53, 8, 6, '#c8955c'); rect(ctx, px + 10, 55, 8, 1, '#e3c08b'); rect(ctx, px + 12, 50, 2, 3, '#4fa36f'); }
     speakerAt(ctx, o.who, 70, 44, f);
     if (o.prop === 'rain') {
       for (let i = 0; i < 26; i++) {
@@ -652,8 +696,10 @@
     ctx.clearRect(0, 0, W, H);
     switch (o.scene) {
       case 'home': home(ctx, f, o); break;
-      case 'beach': beach(ctx, f); break;
-      case 'shop': shop(ctx, f); break;
+      case 'beach': beach(ctx, f, o); break;
+      case 'shop': shop(ctx, f, o); break;
+      case 'airport': airport(ctx, f); break;
+      case 'fireworks': fireworks(ctx, f); break;
       case 'farm': farm(ctx, f); break;
       case 'elevator': elevator(ctx, f, o); break;
       case 'meeting': meeting(ctx, o.phase || 'am', f, o); break;
