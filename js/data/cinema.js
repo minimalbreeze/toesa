@@ -24,9 +24,19 @@ T.CINEMA = {
     custom:  [{ scene: 'office', phase: 'off', who: 'boss', prop: 'resign' }, { scene: 'office', phase: 'off', who: 'boss', bossShock: true }, { scene: 'street', phase: 'morning', walk: true }, { scene: 'beach', sunset: true }],
   },
 
+  // "오늘도 다닐게요" 영상 (endings.js의 stay 문장 4줄과 짝)
+  stay: [
+    { scene: 'office', phase: 'off', prop: 'resign', face: 'happy' },
+    { scene: 'restaurant' },
+    { scene: 'home', mode: 'beer' },
+    { scene: 'street', phase: 'morning', walk: true },
+  ],
+
   // 에필로그: 이 판을 어떻게 살았는지에 따라 붙는다 (위에서부터 맞는 것 최대 2개)
-  // when(s, x): s = 게임 상태, x = { rank, car, estates, collapse, housing, themeBest, persona }
+  // when(s, x): s = 게임 상태, x = { rank, car, estates, collapse, housing, themeBest, moments }
   epilogues: [
+    { when: (s, x) => x.moments >= 50, scene: { scene: 'bar' }, text: '송별회에 사람이 너무 많이 와서 2차를 두 군데로 나눠 갔다. 돈은 모았고, 사람도 남았다.' },
+    { when: (s, x) => x.moments <= 3, scene: { scene: 'home' }, text: '송별회는 없었다. 통장은 꽉 찼는데 단톡방은 조용하다. 다음엔 누구랑 밥을 먹어야 할지 생각해 본다.' },
     { when: (s, x) => x.estates >= 2, scene: { scene: 'street', phase: 'pm' }, text: '원룸 {원룸}채의 월세는 오늘도 꼬박꼬박 들어온다. 세입자 단톡방이 회사 단톡방을 대신한다.' },
     { when: (s, x) => x.estates === 1, scene: { scene: 'street', phase: 'pm' }, text: '원룸 한 채는 그대로 두었다. 보일러 고장 연락만 오지 않으면 된다.' },
     { when: (s, x) => x.rank >= 4, scene: { scene: 'office', phase: 'am' }, text: '부장까지 달고 나온 사람이라, 가끔 전 회사에서 "잠깐 통화 되세요?"가 온다.' },
@@ -44,6 +54,7 @@ T.CINEMA = {
     escape: '몸은 회사, 마음은 퇴사였다. 이제 몸도 따라 나왔다.',
     spend: '버티는 데 돈을 많이 썼다. 이제는 사는 데 쓴다.',
     balanced: '이것저것 조금씩. 그래도 결국 하나는 해냈다.',
+    people: '돌아보면 기억나는 건 숫자가 아니라 같이 밥 먹은 얼굴들이다.',
   },
 
   // 실패 퇴사 영상 (endings.js 재취업 엔딩 문장과 짝)

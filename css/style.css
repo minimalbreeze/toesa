@@ -422,3 +422,13 @@ body.movie-on { overflow: hidden; }
 .achs li span { color: var(--muted); font-size: 12px; }
 .achs li.got { border: 2px solid #b8892a; background: #fff3cf; opacity: 1; }
 .achs li.got b::before { content: '✓ '; color: #8a5d00; }
+
+/* ── 좋은 순간 ── */
+.moment { margin: 0; padding: 6px 10px; border: 2px solid var(--money); background: #eaf6ef; font-size: 14px; }
+.moment b { color: var(--money); margin-right: 6px; }
+.moments { border: 2px solid var(--money); background: #eaf6ef; padding: 8px 10px; display: grid; gap: 2px; font-size: 13px; }
+.moments b { font-size: 12px; letter-spacing: 2px; color: var(--money); }
+.moments p { margin: 0; }
+.rs.stay { border-color: var(--money); }
+.rs.stay b { color: var(--money); }
+.stamp-label.stay { background: var(--money); }
