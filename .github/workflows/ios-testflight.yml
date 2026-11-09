@@ -29,6 +29,23 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: 비밀값 확인
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=""
+          [ -n "$TEAM_ID" ] || missing="$missing APPLE_TEAM_ID"
+          [ -n "$ASC_KEY_ID" ] || missing="$missing ASC_KEY_ID"
+          [ -n "$ASC_ISSUER_ID" ] || missing="$missing ASC_ISSUER_ID"
+          [ -n "$ASC_KEY_P8" ] || missing="$missing ASC_KEY_P8"
+          if [ -n "$missing" ]; then
+            echo "::error::이 저장소에 비밀값이 없다:$missing — RELEASE-iOS.md 4번대로 gh secret set 으로 등록한다"
+            exit 1
+          fi
+
       - name: 웹 파일 모아서 iOS 프로젝트에 넣기
         run: |
           npm ci
