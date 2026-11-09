@@ -80,7 +80,7 @@ App Store Connect → 앱 → TestFlight
 
 ## 7. 심사 제출 (App Store Connect → 앱 → iOS 앱 1.0)
 `store/listing.md`의 내용을 복사해서 넣는다.
-- 스크린샷: `store/screenshots/` (6.9인치, 1320×2868) — 아이폰 전용 앱이라 아이패드 스크린샷은 필요 없음
+- 스크린샷: `store/screenshots/01~07.png` 순서대로 (6.9인치, 1320×2868, 위쪽에 헤더 문구가 들어간 버전) — 아이폰 전용 앱이라 아이패드 스크린샷은 필요 없음
 - 개인정보처리방침 URL: `https://minimalbreeze.github.io/toesa/privacy.html`
 - 지원 URL: `https://minimalbreeze.github.io/toesa/support.html`
 - 앱 개인정보 보호: **"데이터를 수집하지 않음"**
