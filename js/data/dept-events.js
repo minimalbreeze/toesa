@@ -337,7 +337,7 @@ T.EVENTS.push(
     options: [
       { label: '"그건 말씀드릴 수 없어요"', fx: { mental: -2, eval: 2 },
         result: '정답이다. 분위기는 조금 식었다.' },
-      { label: '농담으로 넘긴다', fx: { mental: 3 },
+      { label: '농담으로 넘긴다', moment: '점심 자리에서 다 같이 웃었다', fx: { mental: 3 },
         result: '"1등이에요, 우리 마음속에서." 다들 웃었다. 위기 탈출.' },
       { label: '표정 관리에 실패한다', rolls: [
         { p: 0.5, fx: { mental: -4 }, result: '"아… 아니에요." 상대방이 눈치챘다. 아무 말도 안 했는데.' },
@@ -409,7 +409,7 @@ T.EVENTS.push(
     options: [
       { label: '원 단위까지 정확히 보낸다', fx: { mental: -2, eval: 1 },
         result: '3원 차이로 동기가 "역시 재무팀"이라고 했다. 칭찬인지 모르겠다.' },
-      { label: '"그냥 1만 원씩 보내"', fx: { cash: -4000, mental: 3 },
+      { label: '"그냥 1만 원씩 보내"', moment: '팀 점심값은 그냥 1만 원씩', fx: { cash: -4000, mental: 3 },
         result: '모자란 4천 원은 내가 냈다. 마음의 평화 값.' },
       { label: '정산 앱 링크를 보낸다', fx: { mental: 2 },
         result: '세 명이 앱을 깔다가 포기했다. 결국 계좌 번호를 보냈다.' },

@@ -46,7 +46,7 @@ T.LIFE = {
   // 주말: 금요일 밤 근무 일지 다음에 하나 고른다. fx는 events.js와 같다 (cash는 이번 주말에 쓰는 돈)
   weekend: [
     { id: 'home', label: '집에서 쉰다', text: '배달 두 번, 넷플릭스 한 시즌. 이틀이 사라졌다. 그래도 몸은 좀 낫다.', fx: { hp: 12, mental: 4, cash: -150000 } },
-    { id: 'friends', label: '친구 만나고 문화생활', text: '영화, 맛집, 2차 노래방. 웃다가 하루가 갔다. 카드 문자는 월요일에 보기로 했다.', fx: { hp: 2, mental: 18, cash: -350000 } },
+    { id: 'friends', label: '친구 만나고 문화생활', moment: '친구들이랑 영화·맛집·노래방', text: '영화, 맛집, 2차 노래방. 웃다가 하루가 갔다. 카드 문자는 월요일에 보기로 했다.', fx: { hp: 2, mental: 18, cash: -350000 } },
     { id: 'side', label: '주말 내내 부업', text: '토요일 아침부터 일요일 밤까지 부업만 했다. 커피값만 나갔다. 월요일이 벌써 무섭다.', fx: { hp: -12, mental: -6, cash: -60000, side: 1 } },
     { id: 'drive', label: '차 끌고 드라이브', car: true, text: '바다까지 달렸다. 기름값과 통행료는 생각보다 많이 나왔지만, 창문을 열고 소리를 질렀다.', fx: { hp: 4, mental: 15, cash: -220000 } },
   ],
@@ -60,6 +60,12 @@ T.LIFE = {
     { id: 'new', name: '새 SUV', price: 38000000, monthly: 350000, commute: 45000, hp: 3, mental: 3,
       text: '새 차 냄새. 주차장에서 내 차를 한 번 더 돌아봤다. 통장은 돌아보지 않았다.' },
   ],
+
+  // 사람과 함께한 "좋은 순간" (선택지 말고 따로 생기는 것)
+  moments: {
+    beer: '퇴근하고 친구랑 치맥',
+    parentsWeekend: '주말에 엄마가 차려 준 밥',
+  },
 
   lines: {
     weekendTitle: '주말',
