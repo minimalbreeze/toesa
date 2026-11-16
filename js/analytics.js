@@ -8,7 +8,7 @@
 // 내 방문 빼기: 주소 끝에 ?noga=1 을 붙여 한 번 열면 그 기기는 영구히 제외된다. 다시 켜기는 ?noga=0.
 (function () {
   // GA4 측정 ID(G-…) 또는 구글 태그 관리자 컨테이너 ID(GTM-…). 비어 있으면 꺼져 있다.
-  var ID = 'GTM-NR9F447D';
+  var ID = 'G-L83HNB61KK';
   if (!ID) return;
 
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return;
