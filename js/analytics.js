@@ -7,7 +7,8 @@
 //
 // 내 방문 빼기: 주소 끝에 ?noga=1 을 붙여 한 번 열면 그 기기는 영구히 제외된다. 다시 켜기는 ?noga=0.
 (function () {
-  var ID = ''; // ← GA4 측정 ID (G-로 시작). 비어 있으면 꺼져 있다.
+  // GA4 측정 ID(G-…) 또는 구글 태그 관리자 컨테이너 ID(GTM-…). 비어 있으면 꺼져 있다.
+  var ID = 'GTM-NR9F447D';
   if (!ID) return;
 
   if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return;
@@ -24,14 +25,20 @@
   } catch (e) { /* 저장소를 못 쓰면 평소대로 센다 */ }
   if (off) return;
 
-  var s = document.createElement('script');
-  s.async = true;
-  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ID;
-  document.head.appendChild(s);
   window.dataLayer = window.dataLayer || [];
   window.gtag = function () { window.dataLayer.push(arguments); };
-  window.gtag('js', new Date());
-  window.gtag('config', ID, { anonymize_ip: true });
+  var s = document.createElement('script');
+  s.async = true;
+  if (ID.indexOf('GTM-') === 0) {
+    // 태그 관리자: 무엇을 셀지는 태그 관리자 화면(컨테이너 안의 GA4 태그)에서 정한다
+    window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+    s.src = 'https://www.googletagmanager.com/gtm.js?id=' + ID;
+  } else {
+    s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ID;
+    window.gtag('js', new Date());
+    window.gtag('config', ID, { anonymize_ip: true });
+  }
+  document.head.appendChild(s);
 
   function notice(msg) {
     function show() {
