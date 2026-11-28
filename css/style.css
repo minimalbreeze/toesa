@@ -432,3 +432,4 @@ body.movie-on { overflow: hidden; }
 .rs.stay { border-color: var(--money); }
 .rs.stay b { color: var(--money); }
 .stamp-label.stay { background: var(--money); }
+.share-img { display: block; width: 100%; height: auto; margin: 10px 0; border: 2px solid var(--ink); -webkit-touch-callout: default; }

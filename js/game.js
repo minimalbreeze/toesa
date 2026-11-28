@@ -847,6 +847,9 @@
   }
   const GRADE_ORDER = ['S', 'A', 'B', 'C'];
 
+  // 방문 집계 이벤트: 웹(GA4가 켜진 곳)에서만 보낸다. 앱 안에는 gtag가 없어 아무것도 안 한다 (js/analytics.js).
+  function track(name, params) { try { if (typeof window.gtag === 'function') window.gtag('event', name, params || {}); } catch (e) { /* 무시 */ } }
+
   function ending(id, reason) {
     M.endings = M.endings || {};
     const key = id === 'dream' ? 'dream:' + dream().id : id;
@@ -876,6 +879,7 @@
     saveMeta();
     closeSheet();
     S.view = { type: 'ending', id, reason: reason || '', dream: dream().id, dreamName: dreamName(), days, grade, record, newAch, played: false };
+    track('ending', { ending_id: id === 'dream' ? dream().id : id, grade: grade || '-', days, reason: reason || '' });
     sfx('stamp');
     save(); render();
     movie();
@@ -1439,9 +1443,13 @@
   async function shareReport() {
     const { r } = reportData();
     const per = T.REPORT.personas[r.persona];
-    const top = Object.entries(T.TRAITS).sort((a, b) => r.share[b[0]] - r.share[a[0]]).slice(0, 3).map(([k, tr]) => `${tr.name} ${Math.round(r.share[k] * 100)}%`).join(' · ');
+    const tops = Object.entries(T.TRAITS).sort((a, b) => r.share[b[0]] - r.share[a[0]]).slice(0, 3);
+    const top = tops.map(([k, tr]) => `${tr.name} ${Math.round(r.share[k] * 100)}%`).join(' · ');
     const text = `내 회사생활 진단: 「${per.title}」\n${top}\n#퇴사할게요 #오늘도버텼다`;
-    try { await navigator.clipboard.writeText(text + '\n' + C.shareUrl); toast('리포트 요약을 복사했어.'); } catch (e) { toast('복사가 안 돼. 화면을 캡처해서 공유해 줘.'); }
+    await shareCard(() => T.ShareCard.report({
+      scene: { scene: 'office', phase: 'off', face: 'happy' }, persona: per.title,
+      traits: tops.map(([k, tr]) => [tr.name, r.share[k]]),
+    }), text, 'report');
   }
 
   // ───────── 사직서 ─────────
@@ -1686,15 +1694,56 @@
   }
 
   // ───────── 공유 ─────────
+  function shareLink() {
+    return /^https?:/.test(location.href) && !/claude|localhost|127\./.test(location.host) ? location.href.split('#')[0] : C.shareUrl;
+  }
+  let shareText = '';
+  // 공유 카드: 이미지로 공유되면 끝, 안 되면 이미지를 띄워 길게 눌러 저장하게 하고 글은 따로 복사한다.
+  async function shareCard(make, text, kind) {
+    const url = shareLink();
+    shareText = text + '\n' + url;
+    let cv = null;
+    try { cv = await make(); } catch (e) { cv = null; }
+    if (cv) {
+      const r = await T.ShareCard.share(cv, text, url);
+      if (r === 'cancel') return;
+      if (r === 'shared') { track('share', { content_type: kind, method: 'image' }); return; }
+      sheet(`<h3>공유 카드</h3><p class="muted">이미지를 길게 눌러 저장하거나 공유해 줘.</p>
+        <img class="share-img" src="${T.ShareCard.dataURL(cv)}" alt="${esc(text.split('\n')[0])}">
+        <button class="btn" data-act="share-copy">글도 복사하기</button>
+        <button class="btn primary" data-act="close">닫기</button>`);
+      track('share', { content_type: kind, method: 'card_view' });
+      return;
+    }
+    // 그림을 못 만들면 예전처럼 글로
+    try { if (navigator.share) { await navigator.share({ title: '퇴사할게요', text, url }); track('share', { content_type: kind, method: 'text' }); return; } } catch (err) { if (err && err.name === 'AbortError') return; }
+    copyShare();
+  }
+  async function copyShare() {
+    try { await navigator.clipboard.writeText(shareText); toast('글을 복사했어. 붙여 넣기만 하면 돼.'); track('share', { method: 'copy' }); return; } catch (err) { /* 아래로 */ }
+    sheet(`<h3>공유하기</h3><p class="muted">아래 글을 길게 눌러 복사해 줘.</p><textarea id="share-text" readonly>${esc(shareText)}</textarea><button class="btn primary" data-act="close">닫기</button>`);
+  }
+
   async function share() {
-    const e = endingOf(S.view);
-    const url = /^https?:/.test(location.href) && !/claude|localhost|127\./.test(location.host) ? location.href.split('#')[0] : C.shareUrl;
-    const text = S.view.id === 'stay'
+    const v = S.view;
+    const e = endingOf(v);
+    const failed = v.id === 'rehire', stay = v.id === 'stay';
+    const text = stay
       ? `나는 ${company()} 입사 ${S.month}개월째, 사직서를 찢었다. 「${e.title}」 · 좋은 순간 ${S.moments.length}번\n#퇴사할게요 #오늘도버텼다`
-      : `나는 ${company()} 입사 ${S.month}개월 만에 「${e.title}」으로 퇴사했다.\n#퇴사할게요 #오늘도버텼다`;
-    try { if (navigator.share) { await navigator.share({ title: '퇴사할게요', text, url }); return; } } catch (err) { if (err && err.name === 'AbortError') return; }
-    try { await navigator.clipboard.writeText(text + '\n' + url); toast('결과를 복사했어. 붙여 넣기만 하면 돼.'); return; } catch (err) { /* 아래로 */ }
-    sheet(`<h3>결과 공유하기</h3><p class="muted">아래 글을 길게 눌러 복사해 줘.</p><textarea id="share-text" readonly>${esc(text + '\n' + url)}</textarea><button class="btn primary" data-act="close">닫기</button>`);
+      : `나는 ${company()} 입사 ${S.month}개월 만에 「${e.title}」으로 퇴사했다.${v.grade ? ' ' + v.grade + '등급' : ''}\n#퇴사할게요 #오늘도버텼다`;
+    const lineOf = v.reason === 'burnout' ? e.burnoutLine : v.reason === 'fired' ? e.firedLine : e.line;
+    await shareCard(() => T.ShareCard.ending({
+      scene: cardScene(v), title: e.title, line: fmt(lineOf || ''), grade: v.grade, days: v.days || S.dayNo + 1,
+      diff: (T.LIFE.difficulty[S.diffLv] || T.LIFE.difficulty[1]).name, rank: C.ranks[S.rank].name,
+      moments: S.moments.length, failed, stay,
+    }), text, 'ending');
+  }
+  // 카드 그림: 엔딩 영상의 마지막 꿈 장면을 쓴다 (cinema.js)
+  function cardScene(v) {
+    const cin = T.CINEMA;
+    if (v.id === 'stay') return cin.stay[1];
+    if (v.id === 'dream') { const cuts = cin.dreams[v.dream] || cin.dreams.custom; return cuts[cuts.length - 1]; }
+    const f = cin.fail[v.reason] || cin.fail.angry; return f[f.length - 1];
   }
 
   // ───────── 공통 UI ─────────
@@ -1725,10 +1774,11 @@
     if (!b || b.disabled) return;
     const a = b.dataset.act;
     if (a !== 'choose') sfx('tap');
+    if (a === 'start' || a === 'setup-go') track('game_start', { mode: a === 'start' ? 'default' : 'custom' });
     if (a === 'start') { if (!M.profile) M.profile = Object.assign({}, C.defaultProfile); saveMeta(); newGame(); render(); checkAttendance(); }
     else if (a === 'setup') { S.view = { type: 'setup' }; render(); }
     else if (a === 'setup-go') { const p = readProfile(); if (!p) return; M.profile = p; saveMeta(); newGame(); render(); checkAttendance(); }
-    else if (a === 'report') { if (S && !['title', 'setup'].includes(S.view.type)) report(); }
+    else if (a === 'report') { if (S && !['title', 'setup'].includes(S.view.type)) { report(); track('report_open'); } }
     else if (a === 'report-share') shareReport();
     else if (a === 'profile') editProfile();
     else if (a === 'profile-save') { const p = readProfile(); if (!p) return; M.profile = p; saveMeta(); closeSheet(); render(); toast('저장했어. 회사·부서는 바로 바뀌었어.'); }
@@ -1753,6 +1803,7 @@
     else if (['buy', 'sell', 'estate-buy', 'estate-sell'].includes(a)) investAct(a, b);
     else if (a === 'close') closeSheet();
     else if (a === 'share') share();
+    else if (a === 'share-copy') copyShare();
     else if (a === 'sound') { M.sound = M.sound === false; T.Sound.on = M.sound; saveMeta(); hud(); if (M.sound) sfx('good'); }
     else if (a === 'restart') { closeSheet(); newGame(); S.view = { type: 'title' }; render(); }
   }
